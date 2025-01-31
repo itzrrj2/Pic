@@ -24,8 +24,8 @@ CHANNEL_2 = os.getenv("TELEGRAM_CHANNEL_2")
 DEFAULT_DB_NAME = os.getenv("MONGO_DB_NAME", "telegram_bot")
 
 # APIs for image processing
-ENHANCE_V1_API = "https://prompt.ashlynn.workers.dev/enhance?imgurl="
-REMOVE_BG_API = "https://prompt.ashlynn.workers.dev/removebg?imgurl="
+ENHANCE_V1_API = "https://ar-api-08uk.onrender.com/remini?url="
+REMOVE_BG_API = "https://ar-api-08uk.onrender.com/remove?bg="
 
 # Initialize bot and dispatcher
 bot = Bot(token=TOKEN, parse_mode=types.ParseMode.HTML)
@@ -100,8 +100,8 @@ async def start_command(message: types.Message):
 
     # Send welcome message
     buttons = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton("Remove BG", callback_data="remove_bg")],
-        [InlineKeyboardButton("Enhance Image ✅", callback_data="enhance_v1")]
+        [InlineKeyboardButton("BACKGROUND REMOVER", callback_data="remove_bg")],
+        [InlineKeyboardButton("REMINI PRO FREE", callback_data="enhance_v1")]
     ])
     await message.reply(f"👋 Hey {user_name}, Welcome to the Image Enhancer Bot!\n\nChoose an option below:", reply_markup=buttons)
 
