@@ -17,6 +17,7 @@ MONGO_URI = os.getenv("MONGO_URI")
 ADMIN_ID = int(os.getenv("ADMIN_ID"))
 CHANNEL_1 = os.getenv("TELEGRAM_CHANNEL_1")  # First channel
 CHANNEL_2 = os.getenv("TELEGRAM_CHANNEL_2")  # Second channel
+DEFAULT_DB_NAME = os.getenv("MONGO_DB_NAME", "telegram_bot")  # Default DB name
 
 # Initialize bot and dispatcher
 bot = Bot(token=TOKEN, parse_mode=types.ParseMode.HTML)
@@ -24,7 +25,7 @@ dp = Dispatcher(bot)
 
 # MongoDB setup
 client = MongoClient(MONGO_URI)
-db = client["telegram_bot"]
+db = client[DEFAULT_DB_NAME]  # Default database
 users_collection = db["users"]
 
 # Image Processing APIs
@@ -52,7 +53,7 @@ async def force_join_channels(chat_id):
     buttons = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton("Join Channel 1 ✅", url=f"https://t.me/{CHANNEL_1[1:]}")],
         [InlineKeyboardButton("Join Channel 2 ✅", url=f"https://t.me/{CHANNEL_2[1:]}")],
-        [InlineKeyboardButton("Join Channel 3 ✅", url=f"https://t.me/+FHydfS-U4H01YzBl")],
+        [InlineKeyboardButton("Join Channel 3 ✅", url=f"https://t.me/+R-rCdp1dwq4wYWNl")],
         [InlineKeyboardButton("✅ I've Joined", callback_data="check_join")]
     ])
     await bot.send_message(chat_id, "🚨 To use this bot, please join both channels first!", reply_markup=buttons)
@@ -128,6 +129,23 @@ async def remove_bg(callback_query: types.CallbackQuery):
         # Call Remove BG API
         bg_removed_url = REMOVE_BG_API + file_url
         await bot.send_photo(message.chat.id, bg_removed_url, caption="✅ Background removed successfully!")
+
+
+@dp.message_handler(commands=["setdb"])
+async def set_database(message: types.Message):
+    """Allow admin to change the database dynamically"""
+    if message.from_user.id != ADMIN_ID:
+        await message.reply("❌ You are not authorized to change the database.")
+        return
+
+    db_name = message.text.split(maxsplit=1)[1] if len(message.text.split()) > 1 else None
+    if db_name:
+        global db, users_collection
+        db = client[db_name]
+        users_collection = db["users"]
+        await message.reply(f"✅ Database changed to `{db_name}`")
+    else:
+        await message.reply("⚠️ Please provide a database name. Example: `/setdb my_database`")
 
 
 if __name__ == "__main__":
