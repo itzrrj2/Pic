@@ -1,6 +1,5 @@
 import os
 import logging
-import asyncio
 import aiohttp
 import requests
 from aiogram import Bot, Dispatcher, types
@@ -64,6 +63,7 @@ async def force_join_channels(chat_id):
     buttons = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton("Join Channel 1 ✅", url=f"https://t.me/{CHANNEL_1[1:]}")],
         [InlineKeyboardButton("Join Channel 2 ✅", url=f"https://t.me/{CHANNEL_2[1:]}")],
+        [InlineKeyboardButton("Join Channel 2 ✅", url=f"https://t.me/+LZ5rFtholpI5ZDY1")],
         [InlineKeyboardButton("✅ I've Joined", callback_data="check_join")]
     ])
     await bot.send_message(chat_id, "🚨 To use this bot, please join both channels first!", reply_markup=buttons)
@@ -129,6 +129,20 @@ async def get_file_url(file_id):
     return f"https://api.telegram.org/file/bot{TOKEN}/{file.file_path}"
 
 
+def upload_to_tmpfiles(file_path):
+    """Upload image to tmpfiles.org"""
+    upload_url = 'https://tmpfiles.org/api/v1/upload'
+    
+    # Open the file to upload
+    with open(file_path, 'rb') as file:
+        files = {'file': file}
+        response = requests.post(upload_url, files=files)
+    
+    # Parse the response and return
+    response_data = response.json()
+    return response_data
+
+
 async def fetch_image(url):
     """Download image from API response and determine file type"""
     async with aiohttp.ClientSession() as session:
@@ -144,16 +158,6 @@ async def fetch_image(url):
                 return None
 
 
-def upload_to_tmpfiles(file_path):
-    """Upload image to tmpfiles.org"""
-    upload_url = 'https://tmpfiles.org/api/v1/upload'
-    files = {'file': open(file_path, 'rb')}
-    response = requests.post(upload_url, files=files)
-    response_data = response.json()
-    files.close()  # Close the file after uploading
-    return response_data
-
-
 @dp.message_handler(content_types=["photo"], state=ImageProcessingState.enhancing)
 async def process_enhance_v1(message: types.Message, state: FSMContext):
     """Process image enhancement"""
@@ -161,30 +165,29 @@ async def process_enhance_v1(message: types.Message, state: FSMContext):
     file_id = message.photo[-1].file_id
     file_url = await get_file_url(file_id)
 
-    # Download image
-    async with aiohttp.ClientSession() as session:
-        async with session.get(file_url) as resp:
-            file_data = io.BytesIO(await resp.read())
-            file_data.name = "temp_image.jpg"  # Temporary file name
+    # First download the image to send to tmpfiles
+    image_data = await fetch_image(file_url)
+    if image_data:
+        with open("temp_image.jpg", "wb") as f:
+            f.write(image_data.read())
 
-            # Save to a local file
-            with open(file_data.name, "wb") as f:
-                f.write(file_data.getvalue())
+        # Upload the file to tmpfiles.org
+        tmpfiles_response = upload_to_tmpfiles("temp_image.jpg")
+        tmpfile_url = tmpfiles_response.get("url")
 
-    # Upload the image to tmpfiles
-    tmpfiles_response = upload_to_tmpfiles(file_data.name)
-    if tmpfiles_response.get('url'):
-        enhanced_url = ENHANCE_V1_API + tmpfiles_response['url']
-        image_data = await fetch_image(enhanced_url)
-        if image_data:
-            if image_data.name.endswith(".jpg"):
-                await bot.send_photo(message.chat.id, image_data, caption="✅ Image enhanced successfully!")
+        # Send the image URL to the enhancement API
+        enhanced_url = ENHANCE_V1_API + tmpfile_url
+        enhanced_image_data = await fetch_image(enhanced_url)
+
+        if enhanced_image_data:
+            if enhanced_image_data.name.endswith(".jpg"):
+                await bot.send_photo(message.chat.id, enhanced_image_data, caption="✅ Image enhanced successfully!")
             else:
-                await bot.send_document(message.chat.id, types.InputFile(image_data), caption="✅ Image enhanced successfully!")
+                await bot.send_document(message.chat.id, types.InputFile(enhanced_image_data), caption="✅ Image enhanced successfully!")
         else:
             await bot.send_message(message.chat.id, "❌ Enhancement failed. Try again later.")
     else:
-        await bot.send_message(message.chat.id, "❌ Failed to upload image to tmpfiles.org. Try again later.")
+        await bot.send_message(message.chat.id, "❌ Could not download the image. Try again later.")
 
 
 @dp.message_handler(content_types=["photo"], state=ImageProcessingState.removing_bg)
@@ -193,16 +196,30 @@ async def process_remove_bg(message: types.Message, state: FSMContext):
     await state.finish()
     file_id = message.photo[-1].file_id
     file_url = await get_file_url(file_id)
-    bg_removed_url = REMOVE_BG_API + file_url
 
-    image_data = await fetch_image(bg_removed_url)
+    # First download the image to send to tmpfiles
+    image_data = await fetch_image(file_url)
     if image_data:
-        if image_data.name.endswith(".jpg"):
-            await bot.send_photo(message.chat.id, image_data, caption="✅ Background removed successfully!")
+        with open("temp_image.jpg", "wb") as f:
+            f.write(image_data.read())
+
+        # Upload the file to tmpfiles.org
+        tmpfiles_response = upload_to_tmpfiles("temp_image.jpg")
+        tmpfile_url = tmpfiles_response.get("url")
+
+        # Send the image URL to the background removal API
+        bg_removed_url = REMOVE_BG_API + tmpfile_url
+        bg_removed_image_data = await fetch_image(bg_removed_url)
+
+        if bg_removed_image_data:
+            if bg_removed_image_data.name.endswith(".jpg"):
+                await bot.send_photo(message.chat.id, bg_removed_image_data, caption="✅ Background removed successfully!")
+            else:
+                await bot.send_document(message.chat.id, types.InputFile(bg_removed_image_data), caption="✅ Background removed successfully!")
         else:
-            await bot.send_document(message.chat.id, types.InputFile(image_data), caption="✅ Background removed successfully!")
+            await bot.send_message(message.chat.id, "❌ Failed to remove background. Try again later.")
     else:
-        await bot.send_message(message.chat.id, "❌ Failed to remove background. Try again later.")
+        await bot.send_message(message.chat.id, "❌ Could not download the image. Try again later.")
 
 
 if __name__ == "__main__":
