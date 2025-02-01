@@ -2,7 +2,7 @@ import os
 import logging
 import asyncio
 import aiohttp
-import io
+import requests
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils import executor
@@ -11,6 +11,7 @@ from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from pymongo import MongoClient
 from dotenv import load_dotenv
+import io
 
 # Load environment variables
 load_dotenv()
@@ -131,20 +132,26 @@ async def get_file_url(file_id):
 async def fetch_image(url):
     """Download image from API response and determine file type"""
     async with aiohttp.ClientSession() as session:
-        try:
-            async with session.get(url) as resp:
-                content_type = resp.headers.get("Content-Type", "")
-                if resp.status == 200 and "image" in content_type:
-                    file_extension = content_type.split("/")[-1]  # Extract file type (jpg, png, etc.)
-                    image_data = io.BytesIO(await resp.read())
-                    image_data.name = f"processed_image.{file_extension}"
-                    return image_data
-                else:
-                    logging.error(f"API Error: {resp.status}, Content-Type: {content_type}, Response: {await resp.text()}")
-                    return None
-        except Exception as e:
-            logging.error(f"Failed to fetch image: {e}")
-            return None
+        async with session.get(url) as resp:
+            content_type = resp.headers.get("Content-Type", "")
+            if resp.status == 200 and "image" in content_type:
+                file_extension = content_type.split("/")[-1]  # Extract file type (jpg, png, etc.)
+                image_data = io.BytesIO(await resp.read())
+                image_data.name = f"processed_image.{file_extension}"
+                return image_data
+            else:
+                logging.error(f"API Error: {resp.status}, Content-Type: {content_type}, Response: {await resp.text()}")
+                return None
+
+
+def upload_to_tmpfiles(file_path):
+    """Upload image to tmpfiles.org"""
+    upload_url = 'https://tmpfiles.org/api/v1/upload'
+    files = {'file': open(file_path, 'rb')}
+    response = requests.post(upload_url, files=files)
+    response_data = response.json()
+    files.close()  # Close the file after uploading
+    return response_data
 
 
 @dp.message_handler(content_types=["photo"], state=ImageProcessingState.enhancing)
@@ -153,22 +160,31 @@ async def process_enhance_v1(message: types.Message, state: FSMContext):
     await state.finish()
     file_id = message.photo[-1].file_id
     file_url = await get_file_url(file_id)
-    
-    logging.info(f"Enhancing image with URL: {file_url}")  # Log the URL being sent to the API
-    
-    enhanced_url = ENHANCE_V1_API + file_url
-    logging.info(f"Calling enhancement API with URL: {enhanced_url}")  # Log the full API URL
-    
-    image_data = await fetch_image(enhanced_url)
-    
-    if image_data:
-        if image_data.name.endswith(".jpg"):
-            await bot.send_photo(message.chat.id, image_data, caption="✅ Image enhanced successfully!")
+
+    # Download image
+    async with aiohttp.ClientSession() as session:
+        async with session.get(file_url) as resp:
+            file_data = io.BytesIO(await resp.read())
+            file_data.name = "temp_image.jpg"  # Temporary file name
+
+            # Save to a local file
+            with open(file_data.name, "wb") as f:
+                f.write(file_data.getvalue())
+
+    # Upload the image to tmpfiles
+    tmpfiles_response = upload_to_tmpfiles(file_data.name)
+    if tmpfiles_response.get('url'):
+        enhanced_url = ENHANCE_V1_API + tmpfiles_response['url']
+        image_data = await fetch_image(enhanced_url)
+        if image_data:
+            if image_data.name.endswith(".jpg"):
+                await bot.send_photo(message.chat.id, image_data, caption="✅ Image enhanced successfully!")
+            else:
+                await bot.send_document(message.chat.id, types.InputFile(image_data), caption="✅ Image enhanced successfully!")
         else:
-            await bot.send_document(message.chat.id, types.InputFile(image_data), caption="✅ Image enhanced successfully!")
+            await bot.send_message(message.chat.id, "❌ Enhancement failed. Try again later.")
     else:
-        logging.error("Failed to process image enhancement.")
-        await bot.send_message(message.chat.id, "❌ Enhancement failed. Try again later.")
+        await bot.send_message(message.chat.id, "❌ Failed to upload image to tmpfiles.org. Try again later.")
 
 
 @dp.message_handler(content_types=["photo"], state=ImageProcessingState.removing_bg)
@@ -177,21 +193,15 @@ async def process_remove_bg(message: types.Message, state: FSMContext):
     await state.finish()
     file_id = message.photo[-1].file_id
     file_url = await get_file_url(file_id)
-    
-    logging.info(f"Removing background with URL: {file_url}")  # Log the URL being sent to the API
-    
     bg_removed_url = REMOVE_BG_API + file_url
-    logging.info(f"Calling background removal API with URL: {bg_removed_url}")  # Log the full API URL
-    
+
     image_data = await fetch_image(bg_removed_url)
-    
     if image_data:
         if image_data.name.endswith(".jpg"):
             await bot.send_photo(message.chat.id, image_data, caption="✅ Background removed successfully!")
         else:
             await bot.send_document(message.chat.id, types.InputFile(image_data), caption="✅ Background removed successfully!")
     else:
-        logging.error("Failed to process background removal.")
         await bot.send_message(message.chat.id, "❌ Failed to remove background. Try again later.")
 
 
