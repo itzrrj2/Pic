@@ -1,7 +1,8 @@
 import os
 import logging
-import aiohttp
 import asyncio
+import aiohttp
+import io
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils import executor
@@ -11,7 +12,7 @@ from aiogram.dispatcher.filters.state import State, StatesGroup
 from pymongo import MongoClient
 from dotenv import load_dotenv
 
-# Load environment variables
+# Load environment variables from .env file
 load_dotenv()
 
 # Bot credentials
@@ -118,44 +119,35 @@ async def get_file_url(file_id):
     file = await bot.get_file(file_id)
     return f"https://api.telegram.org/file/bot{TOKEN}/{file.file_path}"
 
-async def fetch_image_with_retry(url, retries=3):
-    """Fetch image with retry logic."""
-    headers = {
-        'User-Agent': 'MyApp/1.0',
-        'Accept': 'application/json'
-    }
+async def fetch_image(url):
+    """Download image from API response and determine file type"""
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as resp:
+            content_type = resp.headers.get("Content-Type", "")
+            if resp.status == 200 and "image" in content_type:
+                file_extension = content_type.split("/")[-1]  # Extract file type (jpg, png, etc.)
+                image_data = io.BytesIO(await resp.read())  # Read as binary
+                image_data.name = f"processed_image.{file_extension}"
+                return image_data
+            else:
+                # Await the response content and log it properly
+                response_text = await resp.read()  # Await the coroutine to get the actual content
+                logging.error(f"API Error: {resp.status}, Content-Type: {content_type}, Response: {response_text[:100]}")  # Print part of the binary response
+                return None
 
-    for attempt in range(retries):
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, headers=headers) as resp:
-                    if resp.status == 200:
-                        return await resp.read()
-                    else:
-                        logging.error(f"Attempt {attempt + 1} failed: {resp.status}")
-                        if resp.status == 500 and attempt < retries - 1:
-                            await asyncio.sleep(2)  # Retry after 2 seconds
-                        else:
-                            break
-        except Exception as e:
-            logging.error(f"Error on attempt {attempt + 1}: {e}")
-            if attempt < retries - 1:
-                await asyncio.sleep(2)  # Retry after 2 seconds
-
-    return None
-
-async def upload_to_tmpfiles(file_data):
+async def upload_to_tmpfiles(file_path):
     """Upload file to tmpfiles.org"""
     upload_url = 'https://tmpfiles.org/api/v1/upload'
     
     async with aiohttp.ClientSession() as session:
-        data = {'file': file_data}
-        async with session.post(upload_url, data=data) as response:
-            if response.status == 200:
-                return await response.json()
-            else:
-                logging.error(f"Failed to upload file. Status: {response.status}")
-                return None
+        with open(file_path, 'rb') as f:
+            data = {'file': f}
+            async with session.post(upload_url, data=data) as response:
+                if response.status == 200:
+                    return await response.json()
+                else:
+                    logging.error(f"Failed to upload file. Status: {response.status}")
+                    return None
 
 @dp.message_handler(content_types=["photo"], state=ImageProcessingState.enhancing)
 async def process_enhance_v1(message: types.Message, state: FSMContext):
@@ -165,9 +157,9 @@ async def process_enhance_v1(message: types.Message, state: FSMContext):
     file_url = await get_file_url(file_id)
     enhanced_url = ENHANCE_V1_API + file_url
 
-    image_data = await fetch_image_with_retry(enhanced_url)
+    image_data = await fetch_image(enhanced_url)
     if image_data:
-        tmpfiles_response = await upload_to_tmpfiles(image_data)  # Upload to tmpfiles.org
+        tmpfiles_response = await upload_to_tmpfiles(image_data.name)  # Upload to tmpfiles.org
         if tmpfiles_response:
             file_url_tmp = tmpfiles_response.get("file_url")
             await bot.send_photo(message.chat.id, file_url_tmp, caption="✅ Image enhanced successfully!")
@@ -184,9 +176,9 @@ async def process_remove_bg(message: types.Message, state: FSMContext):
     file_url = await get_file_url(file_id)
     bg_removed_url = REMOVE_BG_API + file_url
 
-    image_data = await fetch_image_with_retry(bg_removed_url)
+    image_data = await fetch_image(bg_removed_url)
     if image_data:
-        tmpfiles_response = await upload_to_tmpfiles(image_data)  # Upload to tmpfiles.org
+        tmpfiles_response = await upload_to_tmpfiles(image_data.name)  # Upload to tmpfiles.org
         if tmpfiles_response:
             file_url_tmp = tmpfiles_response.get("file_url")
             await bot.send_photo(message.chat.id, file_url_tmp, caption="✅ Background removed successfully!")
