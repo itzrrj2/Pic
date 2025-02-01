@@ -63,7 +63,6 @@ async def force_join_channels(chat_id):
     buttons = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton("Join Channel 1 ✅", url=f"https://t.me/{CHANNEL_1[1:]}")],
         [InlineKeyboardButton("Join Channel 2 ✅", url=f"https://t.me/{CHANNEL_2[1:]}")],
-        [InlineKeyboardButton("Join Channel 2 ✅", url=f"https://t.me/+LZ5rFtholpI5ZDY1")],
         [InlineKeyboardButton("✅ I've Joined", callback_data="check_join")]
     ])
     await bot.send_message(chat_id, "🚨 To use this bot, please join both channels first!", reply_markup=buttons)
@@ -132,16 +131,20 @@ async def get_file_url(file_id):
 async def fetch_image(url):
     """Download image from API response and determine file type"""
     async with aiohttp.ClientSession() as session:
-        async with session.get(url) as resp:
-            content_type = resp.headers.get("Content-Type", "")
-            if resp.status == 200 and "image" in content_type:
-                file_extension = content_type.split("/")[-1]  # Extract file type (jpg, png, etc.)
-                image_data = io.BytesIO(await resp.read())
-                image_data.name = f"processed_image.{file_extension}"
-                return image_data
-            else:
-                logging.error(f"API Error: {resp.status}, Content-Type: {content_type}, Response: {await resp.text()}")
-                return None
+        try:
+            async with session.get(url) as resp:
+                content_type = resp.headers.get("Content-Type", "")
+                if resp.status == 200 and "image" in content_type:
+                    file_extension = content_type.split("/")[-1]  # Extract file type (jpg, png, etc.)
+                    image_data = io.BytesIO(await resp.read())
+                    image_data.name = f"processed_image.{file_extension}"
+                    return image_data
+                else:
+                    logging.error(f"API Error: {resp.status}, Content-Type: {content_type}, Response: {await resp.text()}")
+                    return None
+        except Exception as e:
+            logging.error(f"Failed to fetch image: {e}")
+            return None
 
 
 @dp.message_handler(content_types=["photo"], state=ImageProcessingState.enhancing)
@@ -150,15 +153,21 @@ async def process_enhance_v1(message: types.Message, state: FSMContext):
     await state.finish()
     file_id = message.photo[-1].file_id
     file_url = await get_file_url(file_id)
+    
+    logging.info(f"Enhancing image with URL: {file_url}")  # Log the URL being sent to the API
+    
     enhanced_url = ENHANCE_V1_API + file_url
-
+    logging.info(f"Calling enhancement API with URL: {enhanced_url}")  # Log the full API URL
+    
     image_data = await fetch_image(enhanced_url)
+    
     if image_data:
         if image_data.name.endswith(".jpg"):
             await bot.send_photo(message.chat.id, image_data, caption="✅ Image enhanced successfully!")
         else:
             await bot.send_document(message.chat.id, types.InputFile(image_data), caption="✅ Image enhanced successfully!")
     else:
+        logging.error("Failed to process image enhancement.")
         await bot.send_message(message.chat.id, "❌ Enhancement failed. Try again later.")
 
 
@@ -168,15 +177,21 @@ async def process_remove_bg(message: types.Message, state: FSMContext):
     await state.finish()
     file_id = message.photo[-1].file_id
     file_url = await get_file_url(file_id)
+    
+    logging.info(f"Removing background with URL: {file_url}")  # Log the URL being sent to the API
+    
     bg_removed_url = REMOVE_BG_API + file_url
-
+    logging.info(f"Calling background removal API with URL: {bg_removed_url}")  # Log the full API URL
+    
     image_data = await fetch_image(bg_removed_url)
+    
     if image_data:
         if image_data.name.endswith(".jpg"):
             await bot.send_photo(message.chat.id, image_data, caption="✅ Background removed successfully!")
         else:
             await bot.send_document(message.chat.id, types.InputFile(image_data), caption="✅ Background removed successfully!")
     else:
+        logging.error("Failed to process background removal.")
         await bot.send_message(message.chat.id, "❌ Failed to remove background. Try again later.")
 
 
