@@ -1,7 +1,8 @@
 import os
 import logging
+import asyncio
 import aiohttp
-import requests
+import io
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils import executor
@@ -10,7 +11,6 @@ from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from pymongo import MongoClient
 from dotenv import load_dotenv
-import io
 
 # Load environment variables
 load_dotenv()
@@ -129,20 +129,6 @@ async def get_file_url(file_id):
     return f"https://api.telegram.org/file/bot{TOKEN}/{file.file_path}"
 
 
-def upload_to_tmpfiles(file_path):
-    """Upload image to tmpfiles.org"""
-    upload_url = 'https://tmpfiles.org/api/v1/upload'
-    
-    # Open the file to upload
-    with open(file_path, 'rb') as file:
-        files = {'file': file}
-        response = requests.post(upload_url, files=files)
-    
-    # Parse the response and return
-    response_data = response.json()
-    return response_data
-
-
 async def fetch_image(url):
     """Download image from API response and determine file type"""
     async with aiohttp.ClientSession() as session:
@@ -150,12 +136,29 @@ async def fetch_image(url):
             content_type = resp.headers.get("Content-Type", "")
             if resp.status == 200 and "image" in content_type:
                 file_extension = content_type.split("/")[-1]  # Extract file type (jpg, png, etc.)
-                image_data = io.BytesIO(await resp.read())
+                image_data = io.BytesIO(await resp.read())  # Read as binary
                 image_data.name = f"processed_image.{file_extension}"
                 return image_data
             else:
-                logging.error(f"API Error: {resp.status}, Content-Type: {content_type}, Response: {await resp.text()}")
+                # Avoid decoding binary content as text
+                logging.error(f"API Error: {resp.status}, Content-Type: {content_type}, Response: {await resp.read()[:100]}")  # Print part of the binary response
                 return None
+
+
+async def upload_to_tmpfiles(file_path):
+    """Upload file to tmpfiles.org"""
+    upload_url = 'https://tmpfiles.org/api/v1/upload'
+    async with aiohttp.ClientSession() as session:
+        with open(file_path, 'rb') as file_data:
+            data = {
+                'file': file_data
+            }
+            async with session.post(upload_url, data=data) as resp:
+                if resp.status == 200:
+                    return await resp.json()
+                else:
+                    logging.error(f"Failed to upload to tmpfiles: {resp.status}")
+                    return None
 
 
 @dp.message_handler(content_types=["photo"], state=ImageProcessingState.enhancing)
@@ -164,30 +167,22 @@ async def process_enhance_v1(message: types.Message, state: FSMContext):
     await state.finish()
     file_id = message.photo[-1].file_id
     file_url = await get_file_url(file_id)
+    enhanced_url = ENHANCE_V1_API + file_url
 
-    # First download the image to send to tmpfiles
-    image_data = await fetch_image(file_url)
+    # Fetch enhanced image
+    image_data = await fetch_image(enhanced_url)
     if image_data:
-        with open("temp_image.jpg", "wb") as f:
-            f.write(image_data.read())
-
-        # Upload the file to tmpfiles.org
-        tmpfiles_response = upload_to_tmpfiles("temp_image.jpg")
-        tmpfile_url = tmpfiles_response.get("url")
-
-        # Send the image URL to the enhancement API
-        enhanced_url = ENHANCE_V1_API + tmpfile_url
-        enhanced_image_data = await fetch_image(enhanced_url)
-
-        if enhanced_image_data:
-            if enhanced_image_data.name.endswith(".jpg"):
-                await bot.send_photo(message.chat.id, enhanced_image_data, caption="✅ Image enhanced successfully!")
+        tmpfiles_response = await upload_to_tmpfiles(image_data.name)  # Use tmpfiles upload
+        if tmpfiles_response:
+            tmpfile_url = tmpfiles_response.get("url")
+            if tmpfile_url:
+                await bot.send_photo(message.chat.id, tmpfile_url, caption="✅ Image enhanced successfully!")
             else:
-                await bot.send_document(message.chat.id, types.InputFile(enhanced_image_data), caption="✅ Image enhanced successfully!")
+                await bot.send_message(message.chat.id, "❌ Enhancement failed. No valid URL returned.")
         else:
             await bot.send_message(message.chat.id, "❌ Enhancement failed. Try again later.")
     else:
-        await bot.send_message(message.chat.id, "❌ Could not download the image. Try again later.")
+        await bot.send_message(message.chat.id, "❌ Enhancement failed. Try again later.")
 
 
 @dp.message_handler(content_types=["photo"], state=ImageProcessingState.removing_bg)
@@ -196,30 +191,21 @@ async def process_remove_bg(message: types.Message, state: FSMContext):
     await state.finish()
     file_id = message.photo[-1].file_id
     file_url = await get_file_url(file_id)
+    bg_removed_url = REMOVE_BG_API + file_url
 
-    # First download the image to send to tmpfiles
-    image_data = await fetch_image(file_url)
+    image_data = await fetch_image(bg_removed_url)
     if image_data:
-        with open("temp_image.jpg", "wb") as f:
-            f.write(image_data.read())
-
-        # Upload the file to tmpfiles.org
-        tmpfiles_response = upload_to_tmpfiles("temp_image.jpg")
-        tmpfile_url = tmpfiles_response.get("url")
-
-        # Send the image URL to the background removal API
-        bg_removed_url = REMOVE_BG_API + tmpfile_url
-        bg_removed_image_data = await fetch_image(bg_removed_url)
-
-        if bg_removed_image_data:
-            if bg_removed_image_data.name.endswith(".jpg"):
-                await bot.send_photo(message.chat.id, bg_removed_image_data, caption="✅ Background removed successfully!")
+        tmpfiles_response = await upload_to_tmpfiles(image_data.name)  # Use tmpfiles upload
+        if tmpfiles_response:
+            tmpfile_url = tmpfiles_response.get("url")
+            if tmpfile_url:
+                await bot.send_photo(message.chat.id, tmpfile_url, caption="✅ Background removed successfully!")
             else:
-                await bot.send_document(message.chat.id, types.InputFile(bg_removed_image_data), caption="✅ Background removed successfully!")
+                await bot.send_message(message.chat.id, "❌ Background removal failed. No valid URL returned.")
         else:
-            await bot.send_message(message.chat.id, "❌ Failed to remove background. Try again later.")
+            await bot.send_message(message.chat.id, "❌ Background removal failed. Try again later.")
     else:
-        await bot.send_message(message.chat.id, "❌ Could not download the image. Try again later.")
+        await bot.send_message(message.chat.id, "❌ Failed to remove background. Try again later.")
 
 
 if __name__ == "__main__":
