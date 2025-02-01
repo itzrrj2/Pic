@@ -40,12 +40,10 @@ users_collection = db["users"]
 # Logging setup
 logging.basicConfig(level=logging.INFO)
 
-
 # State machine for tracking user actions
 class ImageProcessingState(StatesGroup):
     enhancing = State()
     removing_bg = State()
-
 
 async def is_user_in_channel(user_id):
     """Check if user is subscribed to both channels"""
@@ -57,17 +55,14 @@ async def is_user_in_channel(user_id):
     except:
         return False
 
-
 async def force_join_channels(chat_id):
     """Force user to join channels before using the bot"""
     buttons = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton("Join Channel 1 ✅", url=f"https://t.me/{CHANNEL_1[1:]}")],
         [InlineKeyboardButton("Join Channel 2 ✅", url=f"https://t.me/{CHANNEL_2[1:]}")],
-        [InlineKeyboardButton("Join Channel 2 ✅", url=f"https://t.me/+LZ5rFtholpI5ZDY1")],
         [InlineKeyboardButton("✅ I've Joined", callback_data="check_join")]
     ])
     await bot.send_message(chat_id, "🚨 To use this bot, please join both channels first!", reply_markup=buttons)
-
 
 @dp.callback_query_handler(lambda c: c.data == "check_join")
 async def check_join_status(callback_query: types.CallbackQuery):
@@ -80,7 +75,6 @@ async def check_join_status(callback_query: types.CallbackQuery):
         await start_command(callback_query.message)
     else:
         await bot.send_message(user_id, "⚠️ You haven't joined both channels yet. Please join and try again.")
-
 
 @dp.message_handler(commands=["start"])
 async def start_command(message: types.Message):
@@ -106,14 +100,12 @@ async def start_command(message: types.Message):
     ])
     await message.reply(f"👋 Hey {user_name}, Welcome to the Image Enhancer Bot!\n\nChoose an option below:", reply_markup=buttons)
 
-
 @dp.callback_query_handler(lambda c: c.data == "enhance_v1")
 async def enhance_v1(callback_query: types.CallbackQuery, state: FSMContext):
     """Handle Enhance Image Request"""
     await callback_query.answer()
     await state.set_state(ImageProcessingState.enhancing.state)
     await bot.send_message(callback_query.message.chat.id, "📸 Send me an image to enhance.")
-
 
 @dp.callback_query_handler(lambda c: c.data == "remove_bg")
 async def remove_bg(callback_query: types.CallbackQuery, state: FSMContext):
@@ -122,12 +114,10 @@ async def remove_bg(callback_query: types.CallbackQuery, state: FSMContext):
     await state.set_state(ImageProcessingState.removing_bg.state)
     await bot.send_message(callback_query.message.chat.id, "📸 Send me an image to remove its background.")
 
-
 async def get_file_url(file_id):
     """Retrieve Telegram file URL"""
     file = await bot.get_file(file_id)
     return f"https://api.telegram.org/file/bot{TOKEN}/{file.file_path}"
-
 
 async def fetch_image(url):
     """Download image from API response and determine file type"""
@@ -140,26 +130,24 @@ async def fetch_image(url):
                 image_data.name = f"processed_image.{file_extension}"
                 return image_data
             else:
-                # Avoid decoding binary content as text
-                logging.error(f"API Error: {resp.status}, Content-Type: {content_type}, Response: {await resp.read()[:100]}")  # Print part of the binary response
+                # Await the response content and log it properly
+                response_text = await resp.read()  # Await the coroutine to get the actual content
+                logging.error(f"API Error: {resp.status}, Content-Type: {content_type}, Response: {response_text[:100]}")  # Print part of the binary response
                 return None
-
 
 async def upload_to_tmpfiles(file_path):
     """Upload file to tmpfiles.org"""
     upload_url = 'https://tmpfiles.org/api/v1/upload'
+    
     async with aiohttp.ClientSession() as session:
-        with open(file_path, 'rb') as file_data:
-            data = {
-                'file': file_data
-            }
-            async with session.post(upload_url, data=data) as resp:
-                if resp.status == 200:
-                    return await resp.json()
+        with open(file_path, 'rb') as f:
+            data = {'file': f}
+            async with session.post(upload_url, data=data) as response:
+                if response.status == 200:
+                    return await response.json()
                 else:
-                    logging.error(f"Failed to upload to tmpfiles: {resp.status}")
+                    logging.error(f"Failed to upload file. Status: {response.status}")
                     return None
-
 
 @dp.message_handler(content_types=["photo"], state=ImageProcessingState.enhancing)
 async def process_enhance_v1(message: types.Message, state: FSMContext):
@@ -169,21 +157,16 @@ async def process_enhance_v1(message: types.Message, state: FSMContext):
     file_url = await get_file_url(file_id)
     enhanced_url = ENHANCE_V1_API + file_url
 
-    # Fetch enhanced image
     image_data = await fetch_image(enhanced_url)
     if image_data:
-        tmpfiles_response = await upload_to_tmpfiles(image_data.name)  # Use tmpfiles upload
+        tmpfiles_response = await upload_to_tmpfiles(image_data.name)  # Upload to tmpfiles.org
         if tmpfiles_response:
-            tmpfile_url = tmpfiles_response.get("url")
-            if tmpfile_url:
-                await bot.send_photo(message.chat.id, tmpfile_url, caption="✅ Image enhanced successfully!")
-            else:
-                await bot.send_message(message.chat.id, "❌ Enhancement failed. No valid URL returned.")
+            file_url_tmp = tmpfiles_response.get("file_url")
+            await bot.send_photo(message.chat.id, file_url_tmp, caption="✅ Image enhanced successfully!")
         else:
             await bot.send_message(message.chat.id, "❌ Enhancement failed. Try again later.")
     else:
         await bot.send_message(message.chat.id, "❌ Enhancement failed. Try again later.")
-
 
 @dp.message_handler(content_types=["photo"], state=ImageProcessingState.removing_bg)
 async def process_remove_bg(message: types.Message, state: FSMContext):
@@ -195,18 +178,14 @@ async def process_remove_bg(message: types.Message, state: FSMContext):
 
     image_data = await fetch_image(bg_removed_url)
     if image_data:
-        tmpfiles_response = await upload_to_tmpfiles(image_data.name)  # Use tmpfiles upload
+        tmpfiles_response = await upload_to_tmpfiles(image_data.name)  # Upload to tmpfiles.org
         if tmpfiles_response:
-            tmpfile_url = tmpfiles_response.get("url")
-            if tmpfile_url:
-                await bot.send_photo(message.chat.id, tmpfile_url, caption="✅ Background removed successfully!")
-            else:
-                await bot.send_message(message.chat.id, "❌ Background removal failed. No valid URL returned.")
+            file_url_tmp = tmpfiles_response.get("file_url")
+            await bot.send_photo(message.chat.id, file_url_tmp, caption="✅ Background removed successfully!")
         else:
-            await bot.send_message(message.chat.id, "❌ Background removal failed. Try again later.")
+            await bot.send_message(message.chat.id, "❌ Failed to remove background. Try again later.")
     else:
         await bot.send_message(message.chat.id, "❌ Failed to remove background. Try again later.")
-
 
 if __name__ == "__main__":
     executor.start_polling(dp, skip_updates=True)
