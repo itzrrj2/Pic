@@ -52,7 +52,8 @@ async def is_user_in_channel(user_id):
         chat_member2 = await bot.get_chat_member(CHANNEL_2, user_id)
         return chat_member1.status in ["member", "administrator", "creator"] and \
                chat_member2.status in ["member", "administrator", "creator"]
-    except:
+    except Exception as e:
+        logging.error(f"Error checking subscription: {e}")
         return False
 
 async def force_join_channels(chat_id):
