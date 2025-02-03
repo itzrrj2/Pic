@@ -1,7 +1,7 @@
 import os
 import requests
 from pyrogram import Client, filters
-from pyrogram.types.input_file import InputFile  # Correct import
+from pyrogram.types import InputFile  # Correct import directly from pyrogram.types
 from pyrogram.types import Message
 
 # Set your bot token and API URLs
