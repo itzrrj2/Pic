@@ -1,18 +1,18 @@
-# Use official Python runtime
-FROM python:3.10
+# Use Python 3.10 as base image
+FROM python:3.10-slim
 
-# Set the working directory
+# Set working directory in the container
 WORKDIR /app
 
-# Copy requirements and install dependencies
-COPY requirements.txt .
+# Install dependencies
+COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the bot script into the container
-COPY . .
+# Copy your Python script into the container
+COPY bot.py /app/bot.py
 
-# Set environment variables (Replace this in a .env file for security)
-ENV TELEGRAM_BOT_TOKEN=""
+# Set the environment variable for the bot token (optional, could be handled in other ways)
+ENV BOT_TOKEN=7734597847:AAGmGMwx_TbWXWa35s3XEWkH0lenUahToO4
 
 # Command to run the bot
 CMD ["python", "bot.py"]
