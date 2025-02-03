@@ -1,7 +1,8 @@
 import os
 import requests
 from pyrogram import Client, filters
-from pyrogram.types import InputFile
+from pyrogram.types.input_file import InputFile  # Corrected import
+from pyrogram.types import Message
 
 # Set your bot token and API URLs
 API_TOKEN = '7734597847:AAGmGMwx_TbWXWa35s3XEWkH0lenUahToO4'
@@ -45,12 +46,12 @@ def download_image(image_url):
 
 # Handler for /start command
 @app.on_message(filters.command('start'))
-async def start(client, message):
+async def start(client, message: Message):
     await message.reply("<b>Welcome! Send me an image to enhance.</b>", parse_mode='html')
 
 # Handler for received images
 @app.on_message(filters.photo)
-async def handle_photo(client, message):
+async def handle_photo(client, message: Message):
     # Get the largest photo available
     photo = message.photo
     file_id = photo.file_id
