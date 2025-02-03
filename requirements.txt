@@ -1,3 +1,2 @@
-aiogram
-httpx
-python-dotenv
+pyrogram==2.0.18
+requests==2.28.1
