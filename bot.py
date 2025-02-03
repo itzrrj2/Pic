@@ -1,16 +1,19 @@
 import os
 import requests
-from pyrogram import Client, filters
-from pyrogram.types import InputFile  # Correct import directly from pyrogram.types
-from pyrogram.types import Message
+from telethon import TelegramClient, events
+from telethon.tl.types import InputFile
+from telethon.sessions import StringSession
 
-# Set your bot token and API URLs
-API_TOKEN = 'YOUR_BOT_TOKEN'
+# Set your API credentials and token
+API_ID = '19593445'  # Obtain from https://my.telegram.org/auth
+API_HASH = 'f78a8ae025c9131d3cc57d9ca0fbbc30'  # Obtain from https://my.telegram.org/auth
+BOT_TOKEN = '7734597847:AAGmGMwx_TbWXWa35s3XEWkH0lenUahToO4'  # Obtain from @BotFather
+
 UPLOAD_URL = 'https://tmpfiles.org/api/v1/upload'
 ENHANCE_API_URL = 'https://ar-api-08uk.onrender.com/remini?url='
 
-# Create the Pyrogram client
-app = Client("enhance_bot", bot_token=API_TOKEN)
+# Create the Telethon client
+client = TelegramClient('bot_session', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
 
 # Function to upload image to tmpfiles.org
 def upload_to_tmpfiles(file_url):
@@ -44,27 +47,26 @@ def download_image(image_url):
         return response.content
     return None
 
-# Handler for /start command
-@app.on_message(filters.command('start'))
-async def start(client, message: Message):
-    await message.reply("<b>Welcome! Send me an image to enhance.</b>", parse_mode='html')
+# Handler for the /start command
+@client.on(events.NewMessage(pattern='/start'))
+async def start(event):
+    await event.reply("<b>Welcome! Send me an image to enhance.</b>", parse_mode='html')
 
 # Handler for received images
-@app.on_message(filters.photo)
-async def handle_photo(client, message: Message):
+@client.on(events.NewMessage(pattern='photo'))
+async def handle_photo(event):
     # Get the largest photo available
-    photo = message.photo
-    file_id = photo.file_id
+    photo = event.message.photo
+    file_id = photo.id
     
     # Get the file URL from Telegram
-    file_info = await client.get_file(file_id)
-    file_url = file_info.file_url
+    file = await client.download_media(photo)
     
     # Upload to tmpfiles.org
-    uploaded_url = upload_to_tmpfiles(file_url)
+    uploaded_url = upload_to_tmpfiles(file)
     
     if uploaded_url:
-        await message.reply("<b>Enhancing your image...</b>", parse_mode='html')
+        await event.reply("<b>Enhancing your image...</b>", parse_mode='html')
         
         # Enhance the image using the API
         enhanced_image_url = enhance_image(uploaded_url)
@@ -75,13 +77,13 @@ async def handle_photo(client, message: Message):
             
             if enhanced_image_data:
                 # Send the enhanced image back to the user
-                await message.reply_photo(InputFile(enhanced_image_data), caption="Here is your enhanced image!")
+                await event.reply_photo(enhanced_image_data, caption="Here is your enhanced image!")
             else:
-                await message.reply("<b>Failed to download the enhanced image.</b>", parse_mode='html')
+                await event.reply("<b>Failed to download the enhanced image.</b>", parse_mode='html')
         else:
-            await message.reply("<b>Failed to enhance the image.</b>", parse_mode='html')
+            await event.reply("<b>Failed to enhance the image.</b>", parse_mode='html')
     else:
-        await message.reply("<b>Failed to upload the image. Please try again.</b>", parse_mode='html')
+        await event.reply("<b>Failed to upload the image. Please try again.</b>", parse_mode='html')
 
 # Run the bot
-app.run()
+client.run_until_disconnected()
