@@ -1,8 +1,10 @@
 import os
 import requests
 from telethon import TelegramClient, events
-from telethon.tl.types import InputFile
-from telethon.sessions import StringSession
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
 
 # Set your API credentials and token
 API_ID = '19593445'  # Obtain from https://my.telegram.org/auth
@@ -17,6 +19,7 @@ client = TelegramClient('bot_session', API_ID, API_HASH).start(bot_token=BOT_TOK
 
 # Function to upload image to tmpfiles.org
 def upload_to_tmpfiles(file_url):
+    logging.info(f"Uploading image to tmpfiles.org from URL: {file_url}")
     # Download the file from Telegram
     response = requests.get(file_url)
     
@@ -28,23 +31,37 @@ def upload_to_tmpfiles(file_url):
         if upload_response.status_code == 200:
             # Extract the URL from the response
             data = upload_response.json()
-            return data.get("data", {}).get("url")
+            upload_url = data.get("data", {}).get("url")
+            logging.info(f"Image uploaded successfully to: {upload_url}")
+            return upload_url
+        else:
+            logging.error(f"Failed to upload image. Status Code: {upload_response.status_code}")
+    else:
+        logging.error(f"Failed to download image from Telegram. Status Code: {response.status_code}")
     return None
 
 # Function to enhance image using the enhancement API
 def enhance_image(uploaded_url):
+    logging.info(f"Enhancing image with URL: {uploaded_url}")
     response = requests.get(ENHANCE_API_URL + uploaded_url)
     
     if response.status_code == 200:
         data = response.json()
-        return data.get('image_url')
+        enhanced_image_url = data.get('image_url')
+        logging.info(f"Enhanced image URL: {enhanced_image_url}")
+        return enhanced_image_url
+    else:
+        logging.error(f"Failed to enhance the image. Status Code: {response.status_code}")
     return None
 
 # Function to download image from the URL
 def download_image(image_url):
+    logging.info(f"Downloading enhanced image from URL: {image_url}")
     response = requests.get(image_url)
     if response.status_code == 200:
         return response.content
+    else:
+        logging.error(f"Failed to download the enhanced image. Status Code: {response.status_code}")
     return None
 
 # Handler for the /start command
@@ -60,10 +77,11 @@ async def handle_photo(event):
     file_id = photo.id
     
     # Get the file URL from Telegram
-    file = await client.download_media(photo)
+    file_url = await client.get_file_url(photo)
+    logging.info(f"Received file URL: {file_url}")
     
     # Upload to tmpfiles.org
-    uploaded_url = upload_to_tmpfiles(file)
+    uploaded_url = upload_to_tmpfiles(file_url)
     
     if uploaded_url:
         await event.reply("<b>Enhancing your image...</b>", parse_mode='html')
