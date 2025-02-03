@@ -1,94 +1,86 @@
 import os
-import httpx
-import asyncio
-from aiogram import Bot, Dispatcher
-from aiogram.types import Message
-from aiogram.enums import ParseMode
-from aiogram.filters import Command
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.client.default import DefaultBotProperties  # Corrected import for v3.7+
+import requests
+from pyrogram import Client, filters
+from pyrogram.types import InputFile
 
-# Load bot token from environment variables (for security)
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+# Set your bot token and API URLs
+API_TOKEN = '7734597847:AAGmGMwx_TbWXWa35s3XEWkH0lenUahToO4'
+UPLOAD_URL = 'https://tmpfiles.org/api/v1/upload'
+ENHANCE_API_URL = 'https://ar-api-08uk.onrender.com/remini?url='
 
-# API URLs
-IMAGE_UPLOAD_API = "https://tmpfiles.org/api/v1/upload"
-ENHANCE_API = "https://ar-api-08uk.onrender.com/remini?url="
+# Create the Pyrogram client
+app = Client("enhance_bot", bot_token=API_TOKEN)
 
-# Initialize bot with aiogram v3.7+ fix for parse_mode
-bot = Bot(
-    token=BOT_TOKEN,
-    default=DefaultBotProperties(parse_mode=ParseMode.HTML)  # Corrected for v3.7+
-)
-dp = Dispatcher()
-
-async def upload_to_tmpfiles(file_path: str) -> str:
-    """Uploads an image to tmpfiles.org and returns the public link."""
-    try:
-        with open(file_path, "rb") as file:
-            async with httpx.AsyncClient(timeout=60) as client:
-                response = await client.post(IMAGE_UPLOAD_API, files={"file": file})
-
-                if response.status_code == 200 and response.json().get("data"):
-                    return response.json()["data"]["url"]  # Extract public URL
-    except Exception as e:
-        print(f"Upload Error: {e}")
+# Function to upload image to tmpfiles.org
+def upload_to_tmpfiles(file_url):
+    # Download the file from Telegram
+    response = requests.get(file_url)
+    
+    if response.status_code == 200:
+        # Send the image data to tmpfiles.org
+        files = {'file': ('image.jpg', response.content, 'image/jpeg')}
+        upload_response = requests.post(UPLOAD_URL, files=files)
+        
+        if upload_response.status_code == 200:
+            # Extract the URL from the response
+            data = upload_response.json()
+            return data.get("data", {}).get("url")
     return None
 
-async def enhance_photo_and_send_link(file_path: str, chat_id: int):
-    """Uploads the image, enhances it using the API, and sends the result."""
-    try:
-        uploaded_url = await upload_to_tmpfiles(file_path)
-        if not uploaded_url:
-            await bot.send_message(chat_id, "<b>Failed to upload image. Please try again.</b>")
-            return
+# Function to enhance image using the enhancement API
+def enhance_image(uploaded_url):
+    response = requests.get(ENHANCE_API_URL + uploaded_url)
+    
+    if response.status_code == 200:
+        data = response.json()
+        return data.get('image_url')
+    return None
 
-        async with httpx.AsyncClient(timeout=60) as client:
-            response = await client.get(ENHANCE_API + uploaded_url)
-            if response.status_code == 200 and response.json().get("image_url"):
-                enhanced_image_url = response.json()["image_url"]
-                await bot.send_message(chat_id, f"<b>Enhanced photo: </b> {enhanced_image_url}")
+# Function to download image from the URL
+def download_image(image_url):
+    response = requests.get(image_url)
+    if response.status_code == 200:
+        return response.content
+    return None
+
+# Handler for /start command
+@app.on_message(filters.command('start'))
+async def start(client, message):
+    await message.reply("<b>Welcome! Send me an image to enhance.</b>", parse_mode='html')
+
+# Handler for received images
+@app.on_message(filters.photo)
+async def handle_photo(client, message):
+    # Get the largest photo available
+    photo = message.photo
+    file_id = photo.file_id
+    
+    # Get the file URL from Telegram
+    file_info = await client.get_file(file_id)
+    file_url = file_info.file_url
+    
+    # Upload to tmpfiles.org
+    uploaded_url = upload_to_tmpfiles(file_url)
+    
+    if uploaded_url:
+        await message.reply("<b>Enhancing your image...</b>", parse_mode='html')
+        
+        # Enhance the image using the API
+        enhanced_image_url = enhance_image(uploaded_url)
+        
+        if enhanced_image_url:
+            # Download the enhanced image
+            enhanced_image_data = download_image(enhanced_image_url)
+            
+            if enhanced_image_data:
+                # Send the enhanced image back to the user
+                await message.reply_photo(InputFile(enhanced_image_data), caption="Here is your enhanced image!")
             else:
-                await bot.send_message(chat_id, "<b>Failed to enhance the image.</b>")
-    except Exception as e:
-        await bot.send_message(chat_id, f"<b>Error:</b> {str(e)}")
-    finally:
-        if os.path.exists(file_path):
-            os.remove(file_path)
-
-@dp.message(Command("start"))
-async def start_command(message: Message):
-    """Handles the /start command."""
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Dev 👨‍💻", url="https://t.me/TheSmartBisnu")],
-        [InlineKeyboardButton(text="Update ✅", url="https://t.me/PremiumNetworkTeam")]
-    ])
-
-    await message.answer(
-        "<b>Welcome! I am a Smart Enhancer BOT. Please send a photo to enhance.</b>",
-        reply_markup=keyboard
-    )
-
-@dp.message()
-async def handle_photo(message: Message):
-    """Handles user messages and processes photos."""
-    if message.photo:
-        photo = message.photo[-1]
-        file_info = await bot.get_file(photo.file_id)
-        file_path = os.path.join(os.getcwd(), f"{photo.file_unique_id}.jpg")
-
-        await bot.download_file(file_info.file_path, file_path)
-        await bot.send_message(message.chat.id, "<b>Enhancing your photo...</b>")
-
-        await enhance_photo_and_send_link(file_path, message.chat.id)
+                await message.reply("<b>Failed to download the enhanced image.</b>", parse_mode='html')
+        else:
+            await message.reply("<b>Failed to enhance the image.</b>", parse_mode='html')
     else:
-        await bot.send_message(message.chat.id, "<b>Please send only photos.</b>")
+        await message.reply("<b>Failed to upload the image. Please try again.</b>", parse_mode='html')
 
-async def main():
-    """Main function to start the bot."""
-    dp.include_router(start_command)  # Register handlers
-    await bot.delete_webhook(drop_pending_updates=True)
-    await dp.start_polling(bot)
-
-if __name__ == "__main__":
-    asyncio.run(main())
+# Run the bot
+app.run()
