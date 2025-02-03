@@ -6,6 +6,7 @@ from aiogram.types import Message
 from aiogram.enums import ParseMode
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.client.default import DefaultBotProperties  # Corrected import for v3.7+
 
 # Load bot token from environment variables (for security)
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -14,8 +15,11 @@ BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 IMAGE_UPLOAD_API = "https://tmpfiles.org/api/v1/upload"
 ENHANCE_API = "https://ar-api-08uk.onrender.com/remini?url="
 
-# Initialize bot and dispatcher
-bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.HTML)
+# Initialize bot with aiogram v3.7+ fix for parse_mode
+bot = Bot(
+    token=BOT_TOKEN,
+    default=DefaultBotProperties(parse_mode=ParseMode.HTML)  # Corrected for v3.7+
+)
 dp = Dispatcher()
 
 async def upload_to_tmpfiles(file_path: str) -> str:
