@@ -1,11 +1,11 @@
 import os
 import requests
 from pyrogram import Client, filters
-from pyrogram.types import InputFile  # Corrected import
+from pyrogram.types.input_file import InputFile  # Correct import
 from pyrogram.types import Message
 
 # Set your bot token and API URLs
-API_TOKEN = '7734597847:AAGmGMwx_TbWXWa35s3XEWkH0lenUahToO4'
+API_TOKEN = 'YOUR_BOT_TOKEN'
 UPLOAD_URL = 'https://tmpfiles.org/api/v1/upload'
 ENHANCE_API_URL = 'https://ar-api-08uk.onrender.com/remini?url='
 
