@@ -5,7 +5,7 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 # Replace with your Telegram bot token
-BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
+BOT_TOKEN = "7734597847:AAGmGMwx_TbWXWa35s3XEWkH0lenUahToO4"
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(bot)
