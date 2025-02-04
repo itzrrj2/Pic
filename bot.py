@@ -6,7 +6,7 @@ from io import BytesIO
 import requests  # Add this import
 
 # Replace with your Telegram bot token
-BOT_TOKEN = "YOUR_BOT_TOKEN"
+BOT_TOKEN = "7734597847:AAG1Gmx_dEWgM5TR3xgljzr-_NpJnL4Jagc"
 bot = telebot.TeleBot(BOT_TOKEN)
 
 # Function to enhance the image
