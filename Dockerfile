@@ -16,12 +16,8 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install required Python dependencies
-RUN pip install torch==1.13.1+cpu \
-    Pillow==9.2.0 \
-    numpy==1.21.5 \
-    requests==2.28.1 \
-    waifu2x==1.0.4 \
-    && rm -rf /var/lib/apt/lists/*
+COPY requirements.txt .
+RUN pip install -r requirements.txt
 
 # Copy the bot.py into the container
 COPY bot.py .
