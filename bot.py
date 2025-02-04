@@ -1,64 +1,70 @@
 import telebot
-import requests
+from PIL import Image, ImageEnhance
 import cv2
 import numpy as np
+import requests
 from io import BytesIO
-from PIL import Image, ImageEnhance
+
+# Your Bot Token from BotFather
+BOT_TOKEN = '7734597847:AAG1Gmx_dEWgM5TR3xgljzr-_NpJnL4Jagc'
 
 # Initialize the bot
-bot_token = '7734597847:AAG1Gmx_dEWgM5TR3xgljzr-_NpJnL4Jagc'
-bot = telebot.TeleBot(bot_token)
+bot = telebot.TeleBot(BOT_TOKEN)
 
-# Option 1: Enhance the image using Pillow (Sharpness)
-def enhance_image_pillow(img):
-    # Convert to RGB if the image is in another mode (like RGBA)
-    img = img.convert("RGB")
+def enhance_image(image_path):
+    """Enhance image quality using Pillow and OpenCV."""
+    # Open the image with Pillow
+    pil_image = Image.open(image_path)
 
-    # Enhance sharpness (improves details without changing colors)
-    enhancer = ImageEnhance.Sharpness(img)
-    img = enhancer.enhance(2.0)  # Increase sharpness by 2x (adjustable)
+    # Enhance sharpness using Pillow
+    enhancer = ImageEnhance.Sharpness(pil_image)
+    pil_image = enhancer.enhance(2.0)  # Increase sharpness (you can tweak this value)
 
-    return img
+    # Convert the enhanced image back to a format that OpenCV can use
+    open_cv_image = np.array(pil_image)
+    open_cv_image = cv2.cvtColor(open_cv_image, cv2.COLOR_RGB2BGR)
 
-# Option 2: Enhance the image using OpenCV (Sharpening Filter)
-def enhance_image_opencv(img):
-    # Convert to numpy array
-    img = np.array(img)
+    # Use OpenCV to enhance contrast (optional step)
+    lab = cv2.cvtColor(open_cv_image, cv2.COLOR_BGR2Lab)
+    l, a, b = cv2.split(lab)
+    l = cv2.equalizeHist(l)
+    lab = cv2.merge([l, a, b])
+    enhanced_image = cv2.cvtColor(lab, cv2.COLOR_Lab2BGR)
 
-    # Define a sharpening kernel
-    kernel = np.array([[0, -1, 0], [-1, 5,-1], [0, -1, 0]])
+    return enhanced_image
 
-    # Apply filter using OpenCV to sharpen the image
-    enhanced_img = cv2.filter2D(img, -1, kernel)
+def save_image_from_url(url):
+    """Download image from URL and save it to a local file."""
+    response = requests.get(url)
+    img = Image.open(BytesIO(response.content))
+    img.save("input_image.jpg")
+    return "input_image.jpg"
 
-    return enhanced_img
+@bot.message_handler(commands=['start'])
+def send_welcome(message):
+    """Respond to the /start command with a welcome message."""
+    bot.reply_to(message, "Hello! Send me a photo and I'll enhance its quality for you.")
 
 @bot.message_handler(content_types=['photo'])
-def process_image(message):
-    # Get the image file
+def handle_photo(message):
+    """Handle received photo and send back enhanced version."""
+    # Get the photo file
     file_info = bot.get_file(message.photo[-1].file_id)
-    file_url = f'https://api.telegram.org/file/bot{bot_token}/{file_info.file_path}'
-    
-    # Download the image
-    response = requests.get(file_url)
-    img = Image.open(BytesIO(response.content))
+    file_url = f'https://api.telegram.org/file/bot{BOT_TOKEN}/{file_info.file_path}'
 
-    # Choose between Pillow or OpenCV enhancement
-    # Uncomment the enhancement option you want to use:
+    # Download and save the image
+    image_path = save_image_from_url(file_url)
 
-    # Using Pillow for sharpness enhancement
-    enhanced_img = enhance_image_pillow(img)
+    # Enhance the image
+    enhanced_image = enhance_image(image_path)
 
-    # OR, using OpenCV for sharpening
-    # enhanced_img = enhance_image_opencv(img)
-
-    # Save the enhanced image
-    output_image_path = "enhanced_image.png"
-    enhanced_img.save(output_image_path)
+    # Save the enhanced image to a file
+    enhanced_image_path = "enhanced_image.jpg"
+    cv2.imwrite(enhanced_image_path, enhanced_image)
 
     # Send the enhanced image back to the user
-    with open(output_image_path, 'rb') as enhanced_image:
-        bot.send_photo(message.chat.id, enhanced_image)
+    with open(enhanced_image_path, 'rb') as photo:
+        bot.send_photo(message.chat.id, photo)
 
-# Start polling
-bot.polling()
+# Polling the bot to keep it running
+bot.polling(none_stop=True)
