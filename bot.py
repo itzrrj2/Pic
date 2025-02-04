@@ -1,39 +1,31 @@
 import telebot
-import cv2
-import numpy as np
-from PIL import Image, ImageEnhance
+import torch
+from PIL import Image
 from io import BytesIO
 import requests
+from realesrgan import RealESRGAN
 
 # Replace with your Telegram bot token
-BOT_TOKEN = "7734597847:AAG1Gmx_dEWgM5TR3xgljzr-_NpJnL4Jagc"
+BOT_TOKEN = "YOUR_BOT_TOKEN"
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# Function to enhance the image
-def enhance_image(image):
-    # Convert the image to a numpy array (keep it in color)
-    image_array = np.array(image)
+# Initialize RealESRGAN model
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model = RealESRGAN(device, scale=4)
+model.load_weights("Real-ESRGAN/weights/RealESRGAN_x4.pth")  # Path to your model weights
 
-    # Sharpen the image
-    kernel = np.array([[0, -1, 0], [-1, 5,-1], [0, -1, 0]])  # A better sharpening kernel
-    sharpened_image = cv2.filter2D(image_array, -1, kernel)
-
-    # Convert sharpened image back to PIL Image for further enhancement
-    pil_image = Image.fromarray(sharpened_image)
-
-    # Enhance the contrast of the image
-    enhancer = ImageEnhance.Contrast(pil_image)
-    enhanced_image = enhancer.enhance(1.5)  # You can adjust the factor as needed (1.0 is no change)
-
-    # Optionally, enhance brightness
-    enhancer_brightness = ImageEnhance.Brightness(enhanced_image)
-    enhanced_image = enhancer_brightness.enhance(1.2)  # Adjust brightness if needed
-
+# Function to enhance the image using RealESRGAN
+def enhance_image_with_realesrgan(image):
+    # Convert the image to a format compatible with RealESRGAN
+    image = image.convert("RGB")
+    
+    # Upscale the image with RealESRGAN
+    enhanced_image = model.predict(image)
     return enhanced_image
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.reply_to(message, "Send me an image, and I'll enhance it!")
+    bot.reply_to(message, "Send me an image, and I'll enhance it using RealESRGAN!")
 
 @bot.message_handler(content_types=['photo'])
 def process_image(message):
@@ -46,8 +38,8 @@ def process_image(message):
     response = requests.get(file_url)
     image = Image.open(BytesIO(response.content))
 
-    # Enhance the image
-    enhanced_image = enhance_image(image)
+    # Enhance the image using RealESRGAN
+    enhanced_image = enhance_image_with_realesrgan(image)
 
     # Save the enhanced image to a BytesIO object
     img_bytes = BytesIO()
