@@ -1,29 +1,23 @@
-# Use the official Python image
+# Use a Python base image
 FROM python:3.8-slim
 
-# Set the working directory inside the container
+# Set working directory inside the container
 WORKDIR /app
 
-# Install system dependencies for Waifu2x
+# Copy the current directory contents into the container
+COPY . /app
+
+# Install system dependencies required for OpenCV and other libraries
 RUN apt-get update && apt-get install -y \
     libgl1-mesa-glx \
     libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender1 \
-    git \
-    wget \
     && rm -rf /var/lib/apt/lists/*
 
-# Install required Python dependencies
-COPY requirements.txt .
-RUN pip install -r requirements.txt
+# Install Python dependencies from requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the bot.py into the container
-COPY bot.py .
+# Expose port (optional, if you're running a web app, not necessary for bots)
+# EXPOSE 5000
 
-# Set environment variables (replace with your actual bot token)
-ENV BOT_TOKEN="7734597847:AAG1Gmx_dEWgM5TR3xgljzr-_NpJnL4Jagc"
-
-# Run the bot
+# Set the entry point for the bot (the Python script that runs the bot)
 CMD ["python", "bot.py"]
