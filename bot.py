@@ -3,9 +3,10 @@ import cv2
 import numpy as np
 from PIL import Image, ImageEnhance
 from io import BytesIO
+import requests  # Add this import
 
 # Replace with your Telegram bot token
-BOT_TOKEN = "7734597847:AAG1Gmx_dEWgM5TR3xgljzr-_NpJnL4Jagc"
+BOT_TOKEN = "YOUR_BOT_TOKEN"
 bot = telebot.TeleBot(BOT_TOKEN)
 
 # Function to enhance the image
@@ -42,7 +43,7 @@ def process_image(message):
     file_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_info.file_path}"
 
     # Download the image
-    response = requests.get(file_url)
+    response = requests.get(file_url)  # Now 'requests' is correctly imported
     image = Image.open(BytesIO(response.content))
 
     # Enhance the image
