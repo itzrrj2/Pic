@@ -3,29 +3,29 @@ import torch
 from PIL import Image
 from io import BytesIO
 import requests
-from realesrgan import RealESRGAN
+from srgan import SRGAN  # Assuming SRGAN is installed via requirements.txt
 
 # Replace with your Telegram bot token
-BOT_TOKEN = "YOUR_BOT_TOKEN"
+BOT_TOKEN = "7734597847:AAG1Gmx_dEWgM5TR3xgljzr-_NpJnL4Jagc"
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# Initialize RealESRGAN model
+# Initialize SRGAN model
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = RealESRGAN(device, scale=4)
-model.load_weights("Real-ESRGAN/weights/RealESRGAN_x4.pth")  # Path to your model weights
+model = SRGAN(device)
+model.load_weights("SRGAN/weights/srgan_model.h5")  # Path to SRGAN model weights
 
-# Function to enhance the image using RealESRGAN
-def enhance_image_with_realesrgan(image):
-    # Convert the image to a format compatible with RealESRGAN
+# Function to enhance the image using SRGAN
+def enhance_image_with_srgan(image):
+    # Convert the image to a format compatible with SRGAN
     image = image.convert("RGB")
     
-    # Upscale the image with RealESRGAN
+    # Enhance the image with SRGAN
     enhanced_image = model.predict(image)
     return enhanced_image
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.reply_to(message, "Send me an image, and I'll enhance it using RealESRGAN!")
+    bot.reply_to(message, "Send me an image, and I'll enhance it using SRGAN!")
 
 @bot.message_handler(content_types=['photo'])
 def process_image(message):
@@ -38,8 +38,8 @@ def process_image(message):
     response = requests.get(file_url)
     image = Image.open(BytesIO(response.content))
 
-    # Enhance the image using RealESRGAN
-    enhanced_image = enhance_image_with_realesrgan(image)
+    # Enhance the image using SRGAN
+    enhanced_image = enhance_image_with_srgan(image)
 
     # Save the enhanced image to a BytesIO object
     img_bytes = BytesIO()
