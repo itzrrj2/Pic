@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 from PIL import Image, ImageEnhance
 from io import BytesIO
-import requests  # Add this import
+import requests
 
 # Replace with your Telegram bot token
 BOT_TOKEN = "7734597847:AAG1Gmx_dEWgM5TR3xgljzr-_NpJnL4Jagc"
@@ -11,23 +11,23 @@ bot = telebot.TeleBot(BOT_TOKEN)
 
 # Function to enhance the image
 def enhance_image(image):
-    # Convert the image to a numpy array
+    # Convert the image to a numpy array (keep it in color)
     image_array = np.array(image)
-    
-    # Convert the image to grayscale (optional)
-    gray_image = cv2.cvtColor(image_array, cv2.COLOR_RGB2GRAY)
-    
+
     # Sharpen the image
-    kernel = np.array([[-1, -1, -1], [-1, 9,-1], [-1, -1, -1]])  # Sharpening kernel
-    sharpened_image = cv2.filter2D(gray_image, -1, kernel)
+    kernel = np.array([[0, -1, 0], [-1, 5,-1], [0, -1, 0]])  # A better sharpening kernel
+    sharpened_image = cv2.filter2D(image_array, -1, kernel)
 
-    # Convert back to RGB
-    sharpened_image_rgb = cv2.cvtColor(sharpened_image, cv2.COLOR_GRAY2RGB)
+    # Convert sharpened image back to PIL Image for further enhancement
+    pil_image = Image.fromarray(sharpened_image)
 
-    # Enhance the contrast
-    pil_image = Image.fromarray(sharpened_image_rgb)
+    # Enhance the contrast of the image
     enhancer = ImageEnhance.Contrast(pil_image)
-    enhanced_image = enhancer.enhance(1.5)  # Adjust the factor to control contrast
+    enhanced_image = enhancer.enhance(1.5)  # You can adjust the factor as needed (1.0 is no change)
+
+    # Optionally, enhance brightness
+    enhancer_brightness = ImageEnhance.Brightness(enhanced_image)
+    enhanced_image = enhancer_brightness.enhance(1.2)  # Adjust brightness if needed
 
     return enhanced_image
 
@@ -43,7 +43,7 @@ def process_image(message):
     file_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_info.file_path}"
 
     # Download the image
-    response = requests.get(file_url)  # Now 'requests' is correctly imported
+    response = requests.get(file_url)
     image = Image.open(BytesIO(response.content))
 
     # Enhance the image
