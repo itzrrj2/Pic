@@ -3,29 +3,24 @@ import torch
 from PIL import Image
 from io import BytesIO
 import requests
-from srgan import SRGAN  # Assuming SRGAN is installed via requirements.txt
+import waifu2x
 
 # Replace with your Telegram bot token
 BOT_TOKEN = "7734597847:AAG1Gmx_dEWgM5TR3xgljzr-_NpJnL4Jagc"
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# Initialize SRGAN model
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = SRGAN(device)
-model.load_weights("SRGAN/weights/srgan_model.h5")  # Path to SRGAN model weights
-
-# Function to enhance the image using SRGAN
-def enhance_image_with_srgan(image):
-    # Convert the image to a format compatible with SRGAN
+# Function to enhance the image using Waifu2x
+def enhance_image_with_waifu2x(image):
+    # Convert the image to a format compatible with Waifu2x
     image = image.convert("RGB")
     
-    # Enhance the image with SRGAN
-    enhanced_image = model.predict(image)
+    # Enhance the image using Waifu2x
+    enhanced_image = waifu2x.convert(image)
     return enhanced_image
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.reply_to(message, "Send me an image, and I'll enhance it using SRGAN!")
+    bot.reply_to(message, "Send me an image, and I'll enhance it using Waifu2x!")
 
 @bot.message_handler(content_types=['photo'])
 def process_image(message):
@@ -38,8 +33,8 @@ def process_image(message):
     response = requests.get(file_url)
     image = Image.open(BytesIO(response.content))
 
-    # Enhance the image using SRGAN
-    enhanced_image = enhance_image_with_srgan(image)
+    # Enhance the image using Waifu2x
+    enhanced_image = enhance_image_with_waifu2x(image)
 
     # Save the enhanced image to a BytesIO object
     img_bytes = BytesIO()
