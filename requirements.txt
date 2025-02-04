@@ -1,7 +1,4 @@
 pyTelegramBotAPI
 opencv-python
 numpy
-torch
-torchvision
-realesrgan
-requests
+Pillow
