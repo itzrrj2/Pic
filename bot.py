@@ -1,48 +1,64 @@
 import telebot
-import torch
-from PIL import Image
-from io import BytesIO
 import requests
-import waifu2x
+import cv2
+import numpy as np
+from io import BytesIO
+from PIL import Image, ImageEnhance
 
-# Replace with your Telegram bot token
-BOT_TOKEN = "7734597847:AAG1Gmx_dEWgM5TR3xgljzr-_NpJnL4Jagc"
-bot = telebot.TeleBot(BOT_TOKEN)
+# Initialize the bot
+bot_token = '7734597847:AAG1Gmx_dEWgM5TR3xgljzr-_NpJnL4Jagc'
+bot = telebot.TeleBot(bot_token)
 
-# Function to enhance the image using Waifu2x
-def enhance_image_with_waifu2x(image):
-    # Convert the image to a format compatible with Waifu2x
-    image = image.convert("RGB")
-    
-    # Enhance the image using Waifu2x
-    enhanced_image = waifu2x.convert(image)
-    return enhanced_image
+# Option 1: Enhance the image using Pillow (Sharpness)
+def enhance_image_pillow(img):
+    # Convert to RGB if the image is in another mode (like RGBA)
+    img = img.convert("RGB")
 
-@bot.message_handler(commands=['start'])
-def send_welcome(message):
-    bot.reply_to(message, "Send me an image, and I'll enhance it using Waifu2x!")
+    # Enhance sharpness (improves details without changing colors)
+    enhancer = ImageEnhance.Sharpness(img)
+    img = enhancer.enhance(2.0)  # Increase sharpness by 2x (adjustable)
+
+    return img
+
+# Option 2: Enhance the image using OpenCV (Sharpening Filter)
+def enhance_image_opencv(img):
+    # Convert to numpy array
+    img = np.array(img)
+
+    # Define a sharpening kernel
+    kernel = np.array([[0, -1, 0], [-1, 5,-1], [0, -1, 0]])
+
+    # Apply filter using OpenCV to sharpen the image
+    enhanced_img = cv2.filter2D(img, -1, kernel)
+
+    return enhanced_img
 
 @bot.message_handler(content_types=['photo'])
 def process_image(message):
-    # Get the highest resolution image
-    file_id = message.photo[-1].file_id
-    file_info = bot.get_file(file_id)
-    file_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_info.file_path}"
-
+    # Get the image file
+    file_info = bot.get_file(message.photo[-1].file_id)
+    file_url = f'https://api.telegram.org/file/bot{bot_token}/{file_info.file_path}'
+    
     # Download the image
     response = requests.get(file_url)
-    image = Image.open(BytesIO(response.content))
+    img = Image.open(BytesIO(response.content))
 
-    # Enhance the image using Waifu2x
-    enhanced_image = enhance_image_with_waifu2x(image)
+    # Choose between Pillow or OpenCV enhancement
+    # Uncomment the enhancement option you want to use:
 
-    # Save the enhanced image to a BytesIO object
-    img_bytes = BytesIO()
-    enhanced_image.save(img_bytes, format='JPEG')
-    img_bytes.seek(0)
+    # Using Pillow for sharpness enhancement
+    enhanced_img = enhance_image_pillow(img)
+
+    # OR, using OpenCV for sharpening
+    # enhanced_img = enhance_image_opencv(img)
+
+    # Save the enhanced image
+    output_image_path = "enhanced_image.png"
+    enhanced_img.save(output_image_path)
 
     # Send the enhanced image back to the user
-    bot.send_photo(message.chat.id, img_bytes, caption="Here is your enhanced image!")
+    with open(output_image_path, 'rb') as enhanced_image:
+        bot.send_photo(message.chat.id, enhanced_image)
 
-# Start the bot
+# Start polling
 bot.polling()
