@@ -1,16 +1,24 @@
-FROM python:3.10-slim
+# Use the official Python image
+FROM python:3.8-slim
 
-# Set the working directory
+# Set the working directory inside the container
 WORKDIR /app
 
-# Copy the requirements file into the container
+# Copy the requirements file
 COPY requirements.txt .
 
 # Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the bot code into the container
-COPY . .
+# Download the Real-ESRGAN model
+RUN mkdir -p models && \
+    wget -O models/RealESRGAN_x4.pth https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4.pth
 
-# Command to run the bot
+# Copy the bot script
+COPY bot.py .
+
+# Set environment variables (replace with your actual bot token)
+ENV BOT_TOKEN="7734597847:AAG1Gmx_dEWgM5TR3xgljzr-_NpJnL4Jagc"
+
+# Run the bot
 CMD ["python", "bot.py"]
