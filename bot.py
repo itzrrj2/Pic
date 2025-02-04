@@ -1,8 +1,8 @@
 import telebot
-from PIL import Image, ImageEnhance
+from PIL import Image
+import requests
 import cv2
 import numpy as np
-import requests
 from io import BytesIO
 
 # Your Bot Token from BotFather
@@ -12,26 +12,19 @@ BOT_TOKEN = '7734597847:AAG1Gmx_dEWgM5TR3xgljzr-_NpJnL4Jagc'
 bot = telebot.TeleBot(BOT_TOKEN)
 
 def enhance_image(image_path):
-    """Enhance image quality using Pillow and OpenCV."""
-    # Open the image with Pillow
-    pil_image = Image.open(image_path)
+    """Enhance image quality by upscaling using OpenCV without reducing quality."""
+    # Read the image using OpenCV
+    img = cv2.imread(image_path)
 
-    # Enhance sharpness using Pillow
-    enhancer = ImageEnhance.Sharpness(pil_image)
-    pil_image = enhancer.enhance(2.0)  # Increase sharpness (you can tweak this value)
+    # Increase the size of the image (upscale with a different interpolation method for better quality)
+    width = int(img.shape[1] * 2)  # Double the width
+    height = int(img.shape[0] * 2)  # Double the height
+    dim = (width, height)
 
-    # Convert the enhanced image back to a format that OpenCV can use
-    open_cv_image = np.array(pil_image)
-    open_cv_image = cv2.cvtColor(open_cv_image, cv2.COLOR_RGB2BGR)
+    # Use cv2.INTER_CUBIC for better interpolation (it gives smoother results)
+    enhanced_img = cv2.resize(img, dim, interpolation=cv2.INTER_CUBIC)
 
-    # Use OpenCV to enhance contrast (optional step)
-    lab = cv2.cvtColor(open_cv_image, cv2.COLOR_BGR2Lab)
-    l, a, b = cv2.split(lab)
-    l = cv2.equalizeHist(l)
-    lab = cv2.merge([l, a, b])
-    enhanced_image = cv2.cvtColor(lab, cv2.COLOR_Lab2BGR)
-
-    return enhanced_image
+    return enhanced_img
 
 def save_image_from_url(url):
     """Download image from URL and save it to a local file."""
