@@ -1,5 +1,5 @@
-# Use a Python base image
-FROM python:3.8-slim
+# Use a Python 3.9 or higher base image
+FROM python:3.9-slim
 
 # Set working directory inside the container
 WORKDIR /app
@@ -15,9 +15,6 @@ RUN apt-get update && apt-get install -y \
 
 # Install Python dependencies from requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
-
-# Expose port (optional, if you're running a web app, not necessary for bots)
-# EXPOSE 5000
 
 # Set the entry point for the bot (the Python script that runs the bot)
 CMD ["python", "bot.py"]
