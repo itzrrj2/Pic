@@ -1,69 +1,68 @@
+import os
 import requests
-import telebot
+from telegram import Update
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext
 
-# Telegram Bot Token
-BOT_TOKEN = "7734597847:AAG1Gmx_dEWgM5TR3xgljzr-_NpJnL4Jagc"
-bot = telebot.TeleBot(BOT_TOKEN)
+# Replace with your Telegram bot token
+TELEGRAM_BOT_TOKEN = "7734597847:AAG1Gmx_dEWgM5TR3xgljzr-_NpJnL4Jagc"
 
-# Function to upload image to Telegraph
-def upload_to_telegraph(image_path):
-    with open(image_path, 'rb') as img:
-        files = {'file': img}
-        response = requests.post('https://telegra.ph/upload', files=files)
-    
+# API Endpoints
+UPLOAD_API_URL = "https://ar-api-08uk.onrender.com/arhost?url="
+ENHANCE_API_URL = "https://ar-api-08uk.onrender.com/remini?url="
+
+async def start(update: Update, context: CallbackContext):
+    """Start command handler"""
+    await update.message.reply_text("Send me an image, and I'll enhance its quality for you!")
+
+async def handle_photo(update: Update, context: CallbackContext):
+    """Handles image upload and enhancement process"""
+    photo = update.message.photo[-1]
+    file = await context.bot.get_file(photo.file_id)
+
+    # Create downloads directory if it doesn't exist
+    os.makedirs("downloads", exist_ok=True)
+    file_path = f"downloads/{photo.file_id}.jpg"
+
+    # Download the photo
+    await file.download_to_drive(file_path)
+
+    with open(file_path, "rb") as img_file:
+        files = {"file": img_file}
+        response = requests.post(UPLOAD_API_URL, files=files)
+
     if response.status_code == 200:
-        result = response.json()
-        if isinstance(result, list) and 'src' in result[0]:
-            return f"https://telegra.ph{result[0]['src']}"
-    return None
+        data = response.json()
+        if "fileurl" in data:
+            uploaded_url = data["fileurl"]
+            enhance_response = requests.post(ENHANCE_API_URL, json={"url": uploaded_url})
 
-# Handle photo messages
-@bot.message_handler(content_types=['photo'])
-def handle_photo(message):
-    try:
-        # Get highest quality photo
-        file_info = bot.get_file(message.photo[-1].file_id)
-        file_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_info.file_path}"
-
-        # Download image locally
-        img_data = requests.get(file_url).content
-        image_path = "temp.jpg"
-        with open(image_path, "wb") as img_file:
-            img_file.write(img_data)
-
-        # Upload to Telegraph
-        telegraph_url = upload_to_telegraph(image_path)
-        if not telegraph_url:
-            bot.reply_to(message, "❌ Failed to upload image to Telegraph.")
-            return
-
-        # Send to AI enhancement API
-        enhancement_api_url = f"https://ar-api-08uk.onrender.com/remini?url={telegraph_url}"
-        response = requests.get(enhancement_api_url)
-
-        # Check if enhancement was successful
-        if response.status_code == 200:
-            api_response = response.json()
-            enhanced_image_url = api_response.get("image_url")  # Assuming API returns {"image_url": "https://tmpfiles.org/dl/.../example.png"}
-
-            if enhanced_image_url:
-                # Download enhanced image from tmpfiles.org
-                enhanced_img_data = requests.get(enhanced_image_url).content
-                enhanced_image_path = "enhanced.jpg"
-                with open(enhanced_image_path, "wb") as img_file:
-                    img_file.write(enhanced_img_data)
-
-                # Send enhanced image to user
-                with open(enhanced_image_path, "rb") as img_file:
-                    bot.send_photo(message.chat.id, img_file, caption="✨ Here is your enhanced image!")
-
+            if enhance_response.status_code == 200:
+                enhance_data = enhance_response.json()
+                if "result" in enhance_data:
+                    enhanced_image_url = enhance_data["result"]
+                    await update.message.reply_text(f"Here is your enhanced image:\n{enhanced_image_url}")
+                else:
+                    await update.message.reply_text("Error: Failed to enhance the image.")
             else:
-                bot.reply_to(message, "❌ Enhancement failed, no image URL received.")
+                await update.message.reply_text("Error: Failed to process the image enhancement.")
         else:
-            bot.reply_to(message, f"❌ API Error: {response.status_code}")
+            await update.message.reply_text("Error: Failed to upload the image.")
+    else:
+        await update.message.reply_text("Error: Failed to upload the image to the API.")
 
-    except Exception as e:
-        bot.reply_to(message, f"❌ Error: {str(e)}")
+    # Remove downloaded file after processing
+    os.remove(file_path)
 
-# Start polling for messages
-bot.polling()
+def main():
+    """Main function to start the bot"""
+    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+
+    # Add handlers
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+
+    # Start polling
+    application.run_polling()
+
+if __name__ == "__main__":
+    main()
