@@ -1,18 +1,20 @@
 # Use an official Python runtime as a parent image
-FROM python:3.10
+FROM python:3.9-slim
 
 # Set the working directory in the container
-WORKDIR /app
+WORKDIR /usr/src/app
 
-# Copy the requirements file and install dependencies
-COPY requirements.txt .
+# Copy the current directory contents into the container
+COPY . .
+
+# Install any needed packages specified in requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the bot script into the container
-COPY bot.py .
+# Make port 80 available to the world outside this container
+EXPOSE 80
 
-# Set environment variable to avoid buffer issues
-ENV PYTHONUNBUFFERED=1
+# Define environment variable for Telegram Bot Token
+ENV TELEGRAM_BOT_TOKEN=7734597847:AAG1Gmx_dEWgM5TR3xgljzr-_NpJnL4Jagc
 
-# Command to run the bot
+# Run bot when the container starts
 CMD ["python", "bot.py"]
