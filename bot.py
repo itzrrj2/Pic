@@ -8,7 +8,7 @@ TELEGRAM_BOT_TOKEN = "7734597847:AAG1Gmx_dEWgM5TR3xgljzr-_NpJnL4Jagc"
 
 # API Endpoints
 UPLOAD_API_URL = "https://ar-api-08uk.onrender.com/arhost?url="
-ENHANCE_API_URL = "https://ar-api-08uk.onrender.com/remini?url="
+ENHANCE_API_URL = "https://ar-api-08uk.onrender.com/remini"
 
 async def start(update: Update, context: CallbackContext):
     """Start command handler"""
@@ -30,11 +30,17 @@ async def handle_photo(update: Update, context: CallbackContext):
 
         # Extract the uploaded image URL from the response
         if "fileurl" in upload_data:
-            hosted_image_url = upload_data["fileurl"]
-            await update.message.reply_text(f"Image uploaded successfully.\nProcessing enhancement...")
+            hosted_image_url = upload_data["fileurl"]  # Extracted URL without quotes
+            await update.message.reply_text("Image uploaded successfully. Processing enhancement...")
 
             # Step 2: Send the hosted image URL to the Enhancement API
-            enhance_response = requests.post(ENHANCE_API_URL, json={"url": hosted_image_url})
+            enhance_response = requests.post(
+                ENHANCE_API_URL,
+                headers={"Content-Type": "application/json"},
+                json={"url": hosted_image_url}  # Send the URL as a raw string without quotes
+            )
+
+            print("Enhancement API Response:", enhance_response.status_code, enhance_response.text)  # Debugging line
 
             if enhance_response.status_code == 200:
                 enhance_data = enhance_response.json()
@@ -46,9 +52,9 @@ async def handle_photo(update: Update, context: CallbackContext):
                     # Step 3: Send the final enhanced image link to the user
                     await update.message.reply_text(f"Here is your enhanced image:\n{enhanced_image_url}")
                 else:
-                    await update.message.reply_text("Error: Enhancement API did not return a valid image link.")
+                    await update.message.reply_text(f"Error: Enhancement API did not return a valid image link. Response: {enhance_data}")
             else:
-                await update.message.reply_text("Error: Failed to process image enhancement.")
+                await update.message.reply_text(f"Error: Failed to process image enhancement. Status: {enhance_response.status_code}, Response: {enhance_response.text}")
         else:
             await update.message.reply_text("Error: Image Uploading API did not return a valid file URL.")
     else:
@@ -63,6 +69,5 @@ def main():
 
     application.run_polling()
 
-# Start the bot if this file is executed directly
-if __name__ == "__main__":
+if name == "main":
     main()
