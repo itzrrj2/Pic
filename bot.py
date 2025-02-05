@@ -35,7 +35,7 @@ async def start(update: Update, context: CallbackContext):
     if not await is_user_member(update, context):
         channels_list = "\n".join([f"- {channel}" for channel in REQUIRED_CHANNELS])
         await update.message.reply_text(
-            f"🚨 To use this bot, please join the following channels:\n{channels_list}\n\nAfter joining, send /start again."
+            f"🚨 To use this bot, please join the following channels:\n - https://t.me/+LZ5rFtholpI5ZDY1\n{channels_list}\n\nAfter joining, send /start again."
         )
         return
 
@@ -46,7 +46,7 @@ async def handle_photo(update: Update, context: CallbackContext):
     if not await is_user_member(update, context):
         channels_list = "\n".join([f"- {channel}" for channel in REQUIRED_CHANNELS])
         await update.message.reply_text(
-            f"🚨 To use this bot, please join the following channels:\n CHANNEL LINK- https://t.me/+LZ5rFtholpI5ZDY1\n{channels_list}\n\nAfter joining, send /start again."
+            f"🚨 To use this bot, please join the following channels:\n - https://t.me/+LZ5rFtholpI5ZDY1\n{channels_list}\n\nAfter joining, send /start again."
         )
         return
 
