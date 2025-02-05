@@ -63,5 +63,6 @@ def main():
 
     application.run_polling()
 
-if name == "main":
+# Start the bot if this file is executed directly
+if __name__ == "__main__":
     main()
