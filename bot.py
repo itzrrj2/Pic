@@ -16,53 +16,52 @@ async def start(update: Update, context: CallbackContext):
 
 async def handle_photo(update: Update, context: CallbackContext):
     """Handles image upload and enhancement process"""
-    photo = update.message.photo[-1]
-    file = await context.bot.get_file(photo.file_id)
+    photo = update.message.photo[-1]  # Get highest quality image
+    file = await context.bot.get_file(photo.file_id)  # Get file from Telegram servers
+    telegram_image_url = file.file_path  # Get direct URL of the uploaded image on Telegram
 
-    # Create downloads directory if it doesn't exist
-    os.makedirs("downloads", exist_ok=True)
-    file_path = f"downloads/{photo.file_id}.jpg"
+    await update.message.reply_text("Uploading image to processing server...")
 
-    # Download the photo
-    await file.download_to_drive(file_path)
+    # Step 1: Upload the Telegram image URL to Image Hosting API
+    upload_response = requests.get(UPLOAD_API_URL + telegram_image_url)
 
-    with open(file_path, "rb") as img_file:
-        files = {"file": img_file}
-        response = requests.post(UPLOAD_API_URL, files=files)
+    if upload_response.status_code == 200:
+        upload_data = upload_response.json()
 
-    if response.status_code == 200:
-        data = response.json()
-        if "fileurl" in data:
-            uploaded_url = data["fileurl"]
-            enhance_response = requests.post(ENHANCE_API_URL, json={"url": uploaded_url})
+        # Extract the uploaded image URL from the response
+        if "fileurl" in upload_data:
+            hosted_image_url = upload_data["fileurl"]
+            await update.message.reply_text(f"Image uploaded successfully.\nProcessing enhancement...")
+
+            # Step 2: Send the hosted image URL to the Enhancement API
+            enhance_response = requests.post(ENHANCE_API_URL, json={"url": hosted_image_url})
 
             if enhance_response.status_code == 200:
                 enhance_data = enhance_response.json()
+
+                # Extract the enhanced image URL from the response
                 if "result" in enhance_data:
                     enhanced_image_url = enhance_data["result"]
+
+                    # Step 3: Send the final enhanced image link to the user
                     await update.message.reply_text(f"Here is your enhanced image:\n{enhanced_image_url}")
                 else:
-                    await update.message.reply_text("Error: Failed to enhance the image.")
+                    await update.message.reply_text("Error: Enhancement API did not return a valid image link.")
             else:
-                await update.message.reply_text("Error: Failed to process the image enhancement.")
+                await update.message.reply_text("Error: Failed to process image enhancement.")
         else:
-            await update.message.reply_text("Error: Failed to upload the image.")
+            await update.message.reply_text("Error: Image Uploading API did not return a valid file URL.")
     else:
-        await update.message.reply_text("Error: Failed to upload the image to the API.")
-
-    # Remove downloaded file after processing
-    os.remove(file_path)
+        await update.message.reply_text(f"Error: Failed to upload the image. Status: {upload_response.status_code}")
 
 def main():
     """Main function to start the bot"""
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
-    # Add handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
 
-    # Start polling
     application.run_polling()
 
-if __name__ == "__main__":
+if name == "main":
     main()
