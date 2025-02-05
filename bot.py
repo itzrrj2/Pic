@@ -19,26 +19,27 @@ async def is_user_member(update: Update, context: CallbackContext) -> bool:
     """Checks if the user is a member of all required channels."""
     user_id = update.message.from_user.id
     bot = context.bot
+    is_member = True  # Assume user is a member, update if needed
 
     for channel in REQUIRED_CHANNELS:
         try:
             chat_member = await bot.get_chat_member(chat_id=channel, user_id=user_id)
-            print(f"User {user_id} status in {channel}: {chat_member.status}")  # Debugging log
-            
+            print(f"User ID: {user_id}, Channel: {channel}, Status: {chat_member.status}")  # Debugging log
+
             if chat_member.status in [ChatMember.LEFT, ChatMember.KICKED]:
-                return False
+                is_member = False  # If the user is left/kicked, they are not a member
         except Exception as e:
             print(f"Error checking membership in {channel}: {e}")  # Log error
-            return False  # If an error occurs, assume the user is not a member
+            is_member = False  # If an error occurs, assume not a member
 
-    return True
+    return is_member
 
 async def start(update: Update, context: CallbackContext):
     """Start command handler"""
     if not await is_user_member(update, context):
         channels_list = "\n".join([f"- {channel}" for channel in REQUIRED_CHANNELS])
         await update.message.reply_text(
-            f"🚨 To use this bot, please join the following channels: \n - https://t.me/+LZ5rFtholpI5ZDY1 \n{channels_list}\n\nAfter joining, send /start again."
+            f"🚨 To use this bot, please join the following channels: \n{channels_list}\n\nAfter joining, send /start again."
         )
         return
 
@@ -49,7 +50,7 @@ async def handle_photo(update: Update, context: CallbackContext):
     if not await is_user_member(update, context):
         channels_list = "\n".join([f"- {channel}" for channel in REQUIRED_CHANNELS])
         await update.message.reply_text(
-            f"🚨 To use this bot, please join the following channels:\n - https://t.me/+LZ5rFtholpI5ZDY1 \n{channels_list}\n\nAfter joining, send /start again."
+            f"🚨 To use this bot, please join the following channels: \n{channels_list}\n\nAfter joining, send /start again."
         )
         return
 
