@@ -3,11 +3,11 @@ import requests
 from telegram import Update, ChatMember
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext
 
-# Replace with your Telegram bot token
+# Bot Token (Same as provided)
 TELEGRAM_BOT_TOKEN = "7079552870:AAEn1PNl4onkz2R_N8KRhmxZTTAuJ0qycmU"
 
-# Required Channels
-REQUIRED_CHANNELS = ["@Xstream_links2", "@Sr_robots"]  # Replace with your actual channel usernames
+# Required Channels (Same as provided)
+REQUIRED_CHANNELS = ["@Xstream_links2", "@Sr_robots"]
 
 # API Endpoints
 UPLOAD_API_URL = "https://ar-api-08uk.onrender.com/arhost?url="
@@ -23,10 +23,13 @@ async def is_user_member(update: Update, context: CallbackContext) -> bool:
     for channel in REQUIRED_CHANNELS:
         try:
             chat_member = await bot.get_chat_member(chat_id=channel, user_id=user_id)
+            print(f"User {user_id} status in {channel}: {chat_member.status}")  # Debugging log
+            
             if chat_member.status in [ChatMember.LEFT, ChatMember.KICKED]:
                 return False
-        except Exception:
-            return False  # If an error occurs (e.g., bot not an admin), assume user is not a member
+        except Exception as e:
+            print(f"Error checking membership in {channel}: {e}")  # Log error
+            return False  # If an error occurs, assume the user is not a member
 
     return True
 
@@ -35,7 +38,7 @@ async def start(update: Update, context: CallbackContext):
     if not await is_user_member(update, context):
         channels_list = "\n".join([f"- {channel}" for channel in REQUIRED_CHANNELS])
         await update.message.reply_text(
-            f"🚨 To use this bot, please join the following channels:\n - https://t.me/+LZ5rFtholpI5ZDY1\n{channels_list}\n\nAfter joining, send /start again."
+            f"🚨 To use this bot, please join the following channels: \n - https://t.me/+LZ5rFtholpI5ZDY1 \n{channels_list}\n\nAfter joining, send /start again."
         )
         return
 
@@ -46,7 +49,7 @@ async def handle_photo(update: Update, context: CallbackContext):
     if not await is_user_member(update, context):
         channels_list = "\n".join([f"- {channel}" for channel in REQUIRED_CHANNELS])
         await update.message.reply_text(
-            f"🚨 To use this bot, please join the following channels:\n - https://t.me/+LZ5rFtholpI5ZDY1\n{channels_list}\n\nAfter joining, send /start again."
+            f"🚨 To use this bot, please join the following channels:\n - https://t.me/+LZ5rFtholpI5ZDY1 \n{channels_list}\n\nAfter joining, send /start again."
         )
         return
 
