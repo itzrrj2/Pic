@@ -1,7 +1,7 @@
 import os
 import requests
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext, CallbackQueryHandler
 
 # Replace with your Telegram bot token
 TELEGRAM_BOT_TOKEN = "7079552870:AAES8Gsl1aVirYysaoBvLf7BHpsXI5n8_rc"
@@ -119,7 +119,8 @@ def main():
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
-    application.add_handler(MessageHandler(filters.TEXT & filters.regex("✅ I Have Joined ✅"), check_join))
+    application.add_handler(CallbackQueryHandler(check_join, pattern="check_membership"))
+
 
     application.run_polling()
 
