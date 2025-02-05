@@ -14,7 +14,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 EXPOSE 80
 
 # Define environment variable for Telegram Bot Token
-ENV TELEGRAM_BOT_TOKEN=7734597847:AAG1Gmx_dEWgM5TR3xgljzr-_NpJnL4Jagc
+ENV TELEGRAM_BOT_TOKEN=7079552870:AAES8Gsl1aVirYysaoBvLf7BHpsXI5n8_rc
 
 # Run bot when the container starts
 CMD ["python", "bot.py"]
