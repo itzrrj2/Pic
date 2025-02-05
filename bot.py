@@ -37,7 +37,6 @@ async def start(update: Update, context: CallbackContext):
         keyboard = [
             [InlineKeyboardButton("Join Channel 1", url=f"https://t.me/{REQUIRED_CHANNEL_1}")],
             [InlineKeyboardButton("Join Channel 2", url=f"https://t.me/{REQUIRED_CHANNEL_2}")],
-            [InlineKeyboardButton("Join Channel 3", url=f"https://t.me/+LZ5rFtholpI5ZDY1")],
             [InlineKeyboardButton("✅ I Have Joined ✅", callback_data="check_membership")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
