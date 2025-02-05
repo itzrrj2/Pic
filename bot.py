@@ -1,64 +1,69 @@
-import telebot
-import os
-import subprocess
-from PIL import Image
-from io import BytesIO
 import requests
+import telebot
 
-# Your Bot Token from BotFather
-BOT_TOKEN = '7734597847:AAG1Gmx_dEWgM5TR3xgljzr-_NpJnL4Jagc'
-
-# Initialize the bot
+# Telegram Bot Token
+BOT_TOKEN = "7734597847:AAG1Gmx_dEWgM5TR3xgljzr-_NpJnL4Jagc"
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# Function to save image from URL
-def save_image_from_url(url):
-    response = requests.get(url)
-    img = Image.open(BytesIO(response.content))
-    img.save("input.jpg")
-    return "input.jpg"
+# Function to upload image to Telegraph
+def upload_to_telegraph(image_path):
+    with open(image_path, 'rb') as img:
+        files = {'file': img}
+        response = requests.post('https://telegra.ph/upload', files=files)
+    
+    if response.status_code == 200:
+        result = response.json()
+        if isinstance(result, list) and 'src' in result[0]:
+            return f"https://telegra.ph{result[0]['src']}"
+    return None
 
-# Function to run GFPGAN model on the image
-def enhance_image():
-    try:
-        # Run GFPGAN model via Docker command
-        subprocess.run(["docker", "run", "--rm", "-v", os.getcwd() + ":/GFPGAN", "gfpgan", "python", "inference_gfpgan.py", "--input", "/GFPGAN/input.jpg", "--output", "/GFPGAN/output.jpg", "--model_path", "/GFPGAN/experiments/pretrained_models/gfpgan.pth"])
-
-        # Return the path to the enhanced image
-        return "output.jpg"
-    except Exception as e:
-        print(f"Error running GFPGAN: {e}")
-        return None
-
-@bot.message_handler(commands=['start'])
-def send_welcome(message):
-    """Respond to the /start command with a welcome message."""
-    bot.reply_to(message, "Hello! Send me a photo, and I'll enhance it using GFPGAN!")
-
+# Handle photo messages
 @bot.message_handler(content_types=['photo'])
 def handle_photo(message):
-    """Handle received photo and send back enhanced version."""
     try:
-        # Get the photo file
+        # Get highest quality photo
         file_info = bot.get_file(message.photo[-1].file_id)
-        file_url = f'https://api.telegram.org/file/bot{BOT_TOKEN}/{file_info.file_path}'
+        file_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_info.file_path}"
 
-        # Download and save the image
-        image_path = save_image_from_url(file_url)
+        # Download image locally
+        img_data = requests.get(file_url).content
+        image_path = "temp.jpg"
+        with open(image_path, "wb") as img_file:
+            img_file.write(img_data)
 
-        # Enhance the image using GFPGAN
-        enhanced_image_path = enhance_image()
+        # Upload to Telegraph
+        telegraph_url = upload_to_telegraph(image_path)
+        if not telegraph_url:
+            bot.reply_to(message, "❌ Failed to upload image to Telegraph.")
+            return
 
-        if enhanced_image_path:
-            # Send the enhanced image back to the user
-            with open(enhanced_image_path, 'rb') as photo:
-                bot.send_photo(message.chat.id, photo)
+        # Send to AI enhancement API
+        enhancement_api_url = f"https://ar-api-08uk.onrender.com/remini?url={telegraph_url}"
+        response = requests.get(enhancement_api_url)
+
+        # Check if enhancement was successful
+        if response.status_code == 200:
+            api_response = response.json()
+            enhanced_image_url = api_response.get("image_url")  # Assuming API returns {"image_url": "https://tmpfiles.org/dl/.../example.png"}
+
+            if enhanced_image_url:
+                # Download enhanced image from tmpfiles.org
+                enhanced_img_data = requests.get(enhanced_image_url).content
+                enhanced_image_path = "enhanced.jpg"
+                with open(enhanced_image_path, "wb") as img_file:
+                    img_file.write(enhanced_img_data)
+
+                # Send enhanced image to user
+                with open(enhanced_image_path, "rb") as img_file:
+                    bot.send_photo(message.chat.id, img_file, caption="✨ Here is your enhanced image!")
+
+            else:
+                bot.reply_to(message, "❌ Enhancement failed, no image URL received.")
         else:
-            bot.reply_to(message, "Sorry, there was an error processing your image. Please try again.")
-    
-    except Exception as e:
-        bot.reply_to(message, "Sorry, there was an error processing your image. Please try again.")
-        print(f"Error: {e}")
+            bot.reply_to(message, f"❌ API Error: {response.status_code}")
 
-# Polling the bot to keep it running
-bot.polling(none_stop=True)
+    except Exception as e:
+        bot.reply_to(message, f"❌ Error: {str(e)}")
+
+# Start polling for messages
+bot.polling()
