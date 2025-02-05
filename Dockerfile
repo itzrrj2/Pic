@@ -1,14 +1,17 @@
-# Use a lightweight Python image
-FROM python:3.8-slim
+# Use an official Python runtime as a parent image
+FROM python:3.10
 
-# Set the working directory
+# Set the working directory in the container
 WORKDIR /app
 
-# Copy bot script
+# Copy the requirements file into the container
+COPY requirements.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the bot script into the container
 COPY bot.py .
 
-# Install dependencies
-RUN pip install python-telegram-bot==13.7 requests
-
-# Run the bot
+# Set the command to run the bot
 CMD ["python", "bot.py"]
