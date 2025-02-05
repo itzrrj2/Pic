@@ -8,7 +8,7 @@ TELEGRAM_BOT_TOKEN = "7734597847:AAG1Gmx_dEWgM5TR3xgljzr-_NpJnL4Jagc"
 
 # API Endpoints
 UPLOAD_API_URL = "https://ar-api-08uk.onrender.com/arhost?url="
-ENHANCE_API_URL = "https://ar-api-08uk.onrender.com/remini"
+ENHANCE_API_URL = "https://ar-api-08uk.onrender.com/remini?url="
 
 async def start(update: Update, context: CallbackContext):
     """Start command handler"""
@@ -30,15 +30,11 @@ async def handle_photo(update: Update, context: CallbackContext):
 
         # Extract the uploaded image URL from the response
         if "fileurl" in upload_data:
-            hosted_image_url = upload_data["fileurl"]  # Extracted URL without quotes
+            hosted_image_url = upload_data["fileurl"]
             await update.message.reply_text("Image uploaded successfully. Processing enhancement...")
 
-            # Step 2: Send the hosted image URL to the Enhancement API
-            enhance_response = requests.post(
-                ENHANCE_API_URL,
-                headers={"Content-Type": "application/json"},
-                json={"url": hosted_image_url}  # Send the URL as a raw string without quotes
-            )
+            # Step 2: Send the hosted image URL to the Enhancement API (GET instead of POST)
+            enhance_response = requests.get(f"{ENHANCE_API_URL}{hosted_image_url}")
 
             print("Enhancement API Response:", enhance_response.status_code, enhance_response.text)  # Debugging line
 
