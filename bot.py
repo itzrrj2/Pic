@@ -4,7 +4,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext, CallbackQueryHandler
 
 # Replace with your Telegram bot token
-TELEGRAM_BOT_TOKEN = "7079552870:AAES8Gsl1aVirYysaoBvLf7BHpsXI5n8_rc"
+TELEGRAM_BOT_TOKEN = "7079552870:AAGGrOH0TeAzJtMktKidHFVflcQ4QLdk-F4"
 
 # Replace with your channel usernames (without '@')
 REQUIRED_CHANNEL_1 = "Xstream_links2"
