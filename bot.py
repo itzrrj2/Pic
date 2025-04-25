@@ -1,127 +1,157 @@
 import os
+import logging
 import requests
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext, CallbackQueryHandler
 
-# Replace with your Telegram bot token
-TELEGRAM_BOT_TOKEN = "7079552870:AAGsBP87aewvP3jNIMwhGxOgQbA08_EKcgw"
+# Configure logging
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
 
-# Replace with your channel usernames (without '@')
-REQUIRED_CHANNEL_1 = "Xstream_links2"
-REQUIRED_CHANNEL_2 = "SR_robots"
+# Configuration
+TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '7079552870:AAEHPQId2oaLw2c4dgZEUlJggctM5_fCwQw')
+REQUIRED_CHANNELS = ["Xstream_links2", "SR_robots", "sr_robots_backup"]
+UPLOAD_API = "https://hosting.ashlynn-repo.workers.dev/?url={URL1}"
+ENHANCE_API = "https://reminisrbot.shresthstakeyt.workers.dev/?url={URL2}&tool=enhance"
 
-# API Endpoints
-UPLOAD_API_URL = "https://hosting.ashlynn-repo.workers.dev/?url="
-ENHANCE_API_URL = "https://ar-api-08uk.onrender.com/remini?url="
+async def error_handler(update: object, context: CallbackContext) -> None:
+    """Log errors and send user-friendly messages."""
+    logger.error("Exception while handling an update:", exc_info=context.error)
+    
+    if isinstance(update, Update):
+        if update.message:
+            await update.message.reply_text("⚠️ An error occurred. Please try again or contact support.")
+        elif update.callback_query:
+            await update.callback_query.message.reply_text("⚠️ An error occurred. Please try again.")
 
 async def check_membership(user_id: int, bot) -> bool:
-    """Checks if the user is a member of the required channels."""
+    """Check if user is member of all required channels."""
     try:
-        chat_member_1 = await bot.get_chat_member(f"@{REQUIRED_CHANNEL_1}", user_id)
-        chat_member_2 = await bot.get_chat_member(f"@{REQUIRED_CHANNEL_2}", user_id)
-
-        # Allowed statuses: 'member', 'administrator', 'creator'
-        allowed_statuses = ["member", "administrator", "creator"]
-        return chat_member_1.status in allowed_statuses and chat_member_2.status in allowed_statuses
+        for channel in REQUIRED_CHANNELS:
+            chat_member = await bot.get_chat_member(f"@{channel}", user_id)
+            if chat_member.status not in ["member", "administrator", "creator"]:
+                return False
+        return True
     except Exception as e:
-        print(f"Error checking membership: {e}")
+        logger.error(f"Membership check failed: {e}")
         return False
 
 async def start(update: Update, context: CallbackContext):
-    """Start command handler"""
-    user_id = update.message.from_user.id
-    bot = context.bot
-
-    if not await check_membership(user_id, bot):
-        # Create join buttons
-        keyboard = [
-            [InlineKeyboardButton("Join Channel 1", url=f"https://t.me/{REQUIRED_CHANNEL_1}")],
-            [InlineKeyboardButton("Join Channel 2", url=f"https://t.me/{REQUIRED_CHANNEL_2}")],
-            [InlineKeyboardButton("Join Channel 3", url=f"https://t.me/+LZ5rFtholpI5ZDY1")],
-            [InlineKeyboardButton("✅ I Have Joined ✅", callback_data="check_membership")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
+    """Handle /start command with channel verification."""
+    try:
+        if not update.message:
+            return
+            
+        user_id = update.message.from_user.id
         
-        await update.message.reply_text("⚠️ You must join both channels to use this bot!", reply_markup=reply_markup)
-        return
+        if not await check_membership(user_id, context.bot):
+            keyboard = [
+                [InlineKeyboardButton(f"Join {channel}", url=f"https://t.me/{channel}")]
+                for channel in REQUIRED_CHANNELS
+            ]
+            keyboard.append([InlineKeyboardButton("✅ Verify Join", callback_data="verify_join")])
+            await update.message.reply_text(
+                "📢 Please join our channels to use this bot:",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            return
+            
+        await update.message.reply_text(
+            "🌟 Welcome to Image Enhancer Bot!\n"
+            "Send me an image and I'll enhance it for you."
+        )
+    except Exception as e:
+        logger.error(f"Start command error: {e}")
+        await error_handler(update, context)
 
-    await update.message.reply_text("Hello, Welcome To Remini Bot,\n We Will Enhance The Image Quality And Send It Back To You")
-
-async def check_join(update: Update, context: CallbackContext):
-    """Callback query handler to verify user membership after clicking 'I Have Joined'."""
-    query = update.callback_query
-    user_id = query.from_user.id
-    bot = context.bot
-
-    if await check_membership(user_id, bot):
-        await query.message.edit_text("✅ You have successfully joined! Now send me an image to enhance.")
-    else:
-        await query.answer("❌ You haven't joined both channels yet!", show_alert=True)
-
-async def handle_photo(update: Update, context: CallbackContext):
-    """Handles image upload and enhancement process"""
-    user_id = update.message.from_user.id
-    bot = context.bot
-
-    if not await check_membership(user_id, bot):
-        keyboard = [
-            [InlineKeyboardButton("Join Channel 1", url=f"https://t.me/{REQUIRED_CHANNEL_1}")],
-            [InlineKeyboardButton("Join Channel 2", url=f"https://t.me/{REQUIRED_CHANNEL_2}")],
-            [InlineKeyboardButton("Join Channel 3", url=f"https://t.me/+LZ5rFtholpI5ZDY1")],
-            [InlineKeyboardButton("✅ I Have Joined ✅", callback_data="check_membership")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
+async def verify_join(update: Update, context: CallbackContext):
+    """Verify channel membership after user clicks button."""
+    try:
+        query = update.callback_query
+        await query.answer()
         
-        await update.message.reply_text("⚠️ You must join both channels to use this bot!", reply_markup=reply_markup)
-        return
-
-    photo = update.message.photo[-1]  # Get highest quality image
-    file = await bot.get_file(photo.file_id)  # Get file from Telegram servers
-    telegram_image_url = file.file_path  # Get direct URL of the uploaded image on Telegram
-
-    await update.message.reply_text("Uploading image to processing server...")
-
-    # Step 1: Upload the Telegram image URL to Image Hosting API
-    upload_response = requests.get(UPLOAD_API_URL + telegram_image_url)
-
-    if upload_response.status_code == 200:
-        upload_data = upload_response.json()
-
-        # Extract the uploaded image URL from the response
-        if "fileurl" in upload_data:
-            hosted_image_url = upload_data["fileurl"]
-            await update.message.reply_text("Image uploaded successfully. Processing enhancement...")
-
-            # Step 2: Send the hosted image URL to the Enhancement API (GET instead of POST)
-            enhance_response = requests.get(f"{ENHANCE_API_URL}{hosted_image_url}")
-
-            if enhance_response.status_code == 200:
-                enhance_data = enhance_response.json()
-
-                # Extract the enhanced image URL from the response
-                if "result" in enhance_data:
-                    enhanced_image_url = enhance_data["result"]
-
-                    # Step 3: Send the final enhanced image link to the user
-                    await update.message.reply_text(f"Here is your enhanced image:\n{enhanced_image_url}")
-                else:
-                    await update.message.reply_text(f"Please Resend Your Image(IF STILL NOT WORKING THEN CONTACT- @SR_adminxbot)")
-            else:
-                await update.message.reply_text(f"Please Resend Your Image(IF STILL NOT WORKING THEN CONTACT- @SR_adminxbot)")
+        if await check_membership(query.from_user.id, context.bot):
+            await query.message.edit_text("✅ Verified! Now send me an image to enhance.")
         else:
-            await update.message.reply_text("Please Resend Your Image(IF STILL NOT WORKING THEN CONTACT- @SR_adminxbot)")
-    else:
-        await update.message.reply_text(f"Please Resend Your Image(IF STILL NOT WORKING THEN CONTACT- @SR_adminxbot)")
+            await query.answer("❌ You haven't joined all channels yet!", show_alert=True)
+    except Exception as e:
+        logger.error(f"Verify join error: {e}")
+        await error_handler(update, context)
+
+async def handle_image(update: Update, context: CallbackContext):
+    """Process the image enhancement workflow."""
+    try:
+        if not update.message or not update.message.photo:
+            return
+            
+        user_id = update.message.from_user.id
+        bot = context.bot
+        
+        # Check channel membership
+        if not await check_membership(user_id, bot):
+            await start(update, context)
+            return
+            
+        # Get highest quality image
+        photo = update.message.photo[-1]
+        file = await bot.get_file(photo.file_id)
+        telegram_url = file.file_path
+        
+        # Step 1: Upload to hosting service
+        msg = await update.message.reply_text("⬆️ Uploading image to hosting service...")
+        
+        upload_url = UPLOAD_API.format(URL1=telegram_url)
+        upload_response = requests.get(upload_url, timeout=30)
+        upload_response.raise_for_status()
+        upload_data = upload_response.json()
+        
+        if "data" not in upload_data:
+            raise ValueError("Invalid response from hosting API")
+            
+        hosted_url = upload_data["data"]
+        await msg.edit_text("🔍 Processing image enhancement...")
+        
+        # Step 2: Enhance image
+        enhance_url = ENHANCE_API.format(URL2=hosted_url)
+        enhance_response = requests.get(enhance_url, timeout=60)
+        enhance_response.raise_for_status()
+        enhance_data = enhance_response.json()
+        
+        if "result" not in enhance_data or "resultImageUrl" not in enhance_data["result"]:
+            raise ValueError("Invalid response from enhance API")
+            
+        enhanced_url = enhance_data["result"]["resultImageUrl"]
+        
+        # Step 3: Send enhanced image
+        await msg.delete()
+        await update.message.reply_photo(
+            photo=enhanced_url,
+            caption="✅ Here's your enhanced image!"
+        )
+        
+    except requests.exceptions.RequestException as e:
+        logger.error(f"API request failed: {e}")
+        await update.message.reply_text("⚠️ Service unavailable. Please try again later.")
+    except Exception as e:
+        logger.error(f"Image processing error: {e}")
+        await update.message.reply_text("❌ Failed to process image. Please try again or contact support.")
 
 def main():
-    """Main function to start the bot"""
+    """Start the bot."""
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-
+    
+    # Handlers
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
-    application.add_handler(CallbackQueryHandler(check_join, pattern="check_membership"))
-
-
+    application.add_handler(MessageHandler(filters.PHOTO, handle_image))
+    application.add_handler(CallbackQueryHandler(verify_join, pattern="^verify_join$"))
+    
+    # Error handler
+    application.add_error_handler(error_handler)
+    
+    logger.info("Bot is running...")
     application.run_polling()
 
 if __name__ == "__main__":
