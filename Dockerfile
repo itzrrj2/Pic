@@ -1,20 +1,18 @@
-# Use an official Python runtime as a parent image
-FROM python:3.9-slim
+# Use official Python image
+FROM python:3.10-slim
 
-# Set the working directory in the container
-WORKDIR /usr/src/app
+# Set working directory
+WORKDIR /app
 
-# Copy the current directory contents into the container
-COPY . .
-
-# Install any needed packages specified in requirements.txt
+# Install dependencies
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Make port 80 available to the world outside this container
-EXPOSE 80
+# Copy project files
+COPY . .
 
-# Define environment variable for Telegram Bot Token
-ENV TELEGRAM_BOT_TOKEN=7462770153:AAEQGYqbbgNRk3kPnSLIosDg0FQvIZBZbXc
+# Set environment variables (optional - for safety use .env in docker-compose)
+ENV PYTHONUNBUFFERED=1
 
-# Run bot when the container starts
-CMD ["python", "bot.py"]
+# Run bot
+CMD ["python", "main.py"]
