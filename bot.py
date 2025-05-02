@@ -2,6 +2,7 @@ import os
 import logging
 import random
 import requests
+import aiohttp
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext, CallbackQueryHandler
@@ -34,22 +35,25 @@ REQUIRED_CHANNELS = os.getenv('REQUIRED_CHANNELS', '').split(',')
 UPLOAD_API = os.getenv('UPLOAD_API')
 ENHANCE_API = os.getenv('ENHANCE_API')
 
+# Add a flag file to check for running instances
+INSTANCE_FLAG_FILE = "/tmp/telegram_bot_running.lock"
+
 # Customizable messages
 WELCOME_MESSAGE = """
-✨ *Welcome to Image Enhancer Pro Bot* ✨
+â¨ *Welcome to Image Enhancer Pro Bot* â¨
 
 Send me any photo or document image and I'll:
-• Enhance the quality automatically
-• Remove noise and artifacts
-• Improve sharpness and clarity
+â¢ Enhance the quality automatically
+â¢ Remove noise and artifacts
+â¢ Improve sharpness and clarity
 """
 
 PROCESSING_MESSAGES = [
-    "🔍 Analyzing your image...",
-    "✨ Working some magic...",
-    "🛠 Enhancing details...",
-    "🎨 Adjusting colors...",
-    "⚡ Final touches..."
+    "ð Analyzing your image...",
+    "â¨ Working some magic...",
+    "ð  Enhancing details...",
+    "ð¨ Adjusting colors...",
+    "â¡ Final touches..."
 ]
 
 async def store_user_data(user_data: dict):
@@ -90,6 +94,8 @@ async def check_membership(user_id: int, bot) -> bool:
     """Check if user is member of all required channels."""
     try:
         for channel in REQUIRED_CHANNELS:
+            if not channel.strip():  # Skip empty channel names
+                continue
             chat_member = await bot.get_chat_member(f"@{channel}", user_id)
             if chat_member.status not in ["member", "administrator", "creator"]:
                 return False
@@ -117,22 +123,17 @@ async def get_file_url_from_update(update: Update, context: CallbackContext):
 async def enhance_image_process(file_url: str):
     """Complete image enhancement workflow."""
     try:
-        # Step 1: Upload to hosting service
-        upload_url = UPLOAD_API.format(URL1=file_url)
-        upload_response = requests.get(upload_url, timeout=30)
-        upload_response.raise_for_status()
-        upload_data = upload_response.json()
-        
-        if "data" not in upload_data:
-            raise ValueError("Invalid response from hosting API")
-            
-        hosted_url = upload_data["data"]
+        # Step 1: Upload to tmpfiles.org
+        hosted_url = await upload_to_tmpfiles(file_url)
+        if not hosted_url:
+            raise ValueError("Failed to upload image to tmpfiles.org")
         
         # Step 2: Enhance image
         enhance_url = ENHANCE_API.format(URL2=hosted_url)
-        enhance_response = requests.get(enhance_url, timeout=60)
-        enhance_response.raise_for_status()
-        enhance_data = enhance_response.json()
+        async with aiohttp.ClientSession() as session:
+            async with session.get(enhance_url, timeout=60) as response:
+                response.raise_for_status()
+                enhance_data = await response.json()
         
         if "result" not in enhance_data or "resultImageUrl" not in enhance_data["result"]:
             raise ValueError("Invalid response from enhance API")
@@ -185,7 +186,7 @@ async def handle_image(update: Update, context: CallbackContext):
         # Get file URL
         file_url = await get_file_url_from_update(update, context)
         if not file_url:
-            await update.message.reply_text("⚠️ Please send a valid image file")
+            await update.message.reply_text("â ï¸ Please send a valid image file")
             return
             
         # Update user stats
@@ -205,18 +206,18 @@ async def handle_image(update: Update, context: CallbackContext):
         await processing_msg.delete()
         await update.message.reply_photo(
             photo=enhanced_url,
-            caption="✅ *Enhancement Complete!*\nYour image has been successfully enhanced",
+            caption="â *Enhancement Complete!*\nYour image has been successfully enhanced",
             parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔄 Enhance Another", callback_data="enhance_another")],
-                [InlineKeyboardButton("⭐ Rate Us", url="https://t.me/sr_robots")]
+                [InlineKeyboardButton("ð Enhance Another", callback_data="enhance_another")],
+                [InlineKeyboardButton("â­ Rate Us", url="https://t.me/sr_robots")]
             ])
         )
         
     except Exception as e:
         logger.error(f"Image handling error: {e}")
         await update.message.reply_text(
-            "❌ *Enhancement Failed*\nPlease try again with a different image",
+            "â *Enhancement Failed*\nPlease try again with a different image",
             parse_mode="Markdown"
         )
 
@@ -224,7 +225,7 @@ async def broadcast(update: Update, context: CallbackContext):
     """Admin broadcast command with confirmation."""
     try:
         if update.message.from_user.id not in ADMIN_IDS:
-            await update.message.reply_text("🚫 Admin access required")
+            await update.message.reply_text("ð« Admin access required")
             return
             
         if not context.args:
@@ -235,12 +236,12 @@ async def broadcast(update: Update, context: CallbackContext):
         total_users = users_collection.count_documents({})
         
         keyboard = [
-            [InlineKeyboardButton("✅ Confirm", callback_data=f"confirm_broadcast:{message}")],
-            [InlineKeyboardButton("❌ Cancel", callback_data="cancel_broadcast")]
+            [InlineKeyboardButton("â Confirm", callback_data=f"confirm_broadcast:{message}")],
+            [InlineKeyboardButton("â Cancel", callback_data="cancel_broadcast")]
         ]
         
         await update.message.reply_text(
-            f"📢 Broadcast to {total_users} users:\n\n{message}\n\nConfirm?",
+            f"ð¢ Broadcast to {total_users} users:\n\n{message}\n\nConfirm?",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
         
@@ -248,13 +249,32 @@ async def broadcast(update: Update, context: CallbackContext):
         logger.error(f"Broadcast command error: {e}")
         await error_handler(update, context)
 
+async def verify_join_callback(update: Update, context: CallbackContext):
+    """Handle the 'verify_join' callback."""
+    query = update.callback_query
+    await query.answer()
+    
+    if await check_membership(query.from_user.id, context.bot):
+        await query.message.reply_text(WELCOME_MESSAGE, parse_mode="Markdown")
+        await query.message.delete()
+    else:
+        await query.edit_message_text(
+            "You still need to join all required channels to use this bot.",
+            reply_markup=query.message.reply_markup
+        )
+
+async def enhance_another_callback(update: Update, context: CallbackContext):
+    """Handle the 'enhance_another' callback."""
+    query = update.callback_query
+    await query.answer("Send me another image to enhance!")
+
 async def confirm_broadcast(update: Update, context: CallbackContext):
     """Handle broadcast confirmation."""
     query = update.callback_query
     await query.answer()
     
     if query.from_user.id not in ADMIN_IDS:
-        await query.edit_message_text("🚫 Unauthorized")
+        await query.edit_message_text("ð« Unauthorized")
         return
         
     if query.data.startswith("confirm_broadcast:"):
@@ -266,13 +286,13 @@ async def confirm_broadcast(update: Update, context: CallbackContext):
             success = 0
             failed = 0
             
-            await query.edit_message_text("📤 Sending broadcast...")
+            await query.edit_message_text("ð¤ Sending broadcast...")
             
             for user in users:
                 try:
                     await context.bot.send_message(
                         chat_id=user["user_id"],
-                        text=f"📢 Announcement:\n\n{message}"
+                        text=f"ð¢ Announcement:\n\n{message}"
                     )
                     success += 1
                 except Exception:
@@ -280,19 +300,22 @@ async def confirm_broadcast(update: Update, context: CallbackContext):
                     continue
                     
             await query.edit_message_text(
-                f"✅ Broadcast sent!\nSuccess: {success}\nFailed: {failed}"
+                f"â Broadcast sent!\nSuccess: {success}\nFailed: {failed}"
             )
+    elif query.data == "cancel_broadcast":
+        await query.edit_message_text("ð¢ Broadcast cancelled")
 
 async def prompt_to_join(update: Update, context: CallbackContext):
     """Prompt user to join required channels."""
-    buttons = [
-        [InlineKeyboardButton(f"Join {channel}", url=f"https://t.me/{channel}")]
-        for channel in REQUIRED_CHANNELS
-    ]
-    buttons.append([InlineKeyboardButton("✅ Verify Join", callback_data="verify_join")])
+    buttons = []
+    for channel in REQUIRED_CHANNELS:
+        if channel.strip():  # Skip empty channel names
+            buttons.append([InlineKeyboardButton(f"Join {channel}", url=f"https://t.me/{channel}")])
+    
+    buttons.append([InlineKeyboardButton("â Verify Join", callback_data="verify_join")])
     
     await update.message.reply_text(
-        "📢 Please join our channels to use this bot:",
+        "ð¢ Please join our channels to use this bot:",
         reply_markup=InlineKeyboardMarkup(buttons)
     )
 
@@ -302,17 +325,53 @@ async def error_handler(update: object, context: CallbackContext):
     
     if isinstance(update, Update):
         if update.message:
-            await update.message.reply_text("⚠️ An error occurred. Please try again.")
+            await update.message.reply_text("â ï¸ An error occurred. Please try again.")
         elif update.callback_query:
-            await update.callback_query.message.reply_text("⚠️ An error occurred.")
+            await update.callback_query.message.reply_text("â ï¸ An error occurred.")
+
+def check_for_running_instance():
+    """Check if there's already a running instance of the bot."""
+    import os
+    import sys
+    import fcntl
+    
+    try:
+        # Try to create and lock the file
+        lock_file = open(INSTANCE_FLAG_FILE, 'w')
+        fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        
+        # If we got here, no other instance is running
+        # Keep the file open to maintain the lock
+        return lock_file
+    
+    except IOError:
+        logger.error("Another instance of the bot is already running. Exiting.")
+        sys.exit(1)
+
+def cleanup_lock_file(lock_file):
+    """Clean up the lock file when the bot stops."""
+    if lock_file:
+        import fcntl
+        fcntl.flock(lock_file, fcntl.LOCK_UN)
+        lock_file.close()
+        try:
+            os.remove(INSTANCE_FLAG_FILE)
+        except:
+            pass
 
 def main():
     """Start the bot with all handlers."""
+    lock_file = None
+    
     try:
+        # Check for running instances first
+        lock_file = check_for_running_instance()
+        
         # Verify MongoDB connection
         client.admin.command('ping')
         logger.info("Connected to MongoDB")
         
+        # Build application with stop_signals for proper cleanup
         application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
         
         # Command handlers
@@ -324,18 +383,23 @@ def main():
         application.add_handler(MessageHandler(filters.Document.IMAGE, handle_image))
         
         # Callback handlers
-        application.add_handler(CallbackQueryHandler(confirm_broadcast, pattern="^(confirm|cancel)_broadcast"))
+        application.add_handler(CallbackQueryHandler(confirm_broadcast, pattern="^confirm_broadcast:|^cancel_broadcast$"))
+        application.add_handler(CallbackQueryHandler(verify_join_callback, pattern="^verify_join$"))
+        application.add_handler(CallbackQueryHandler(enhance_another_callback, pattern="^enhance_another$"))
         
         # Error handler
         application.add_error_handler(error_handler)
         
         logger.info("Bot is running...")
-        application.run_polling()
+        application.run_polling(allowed_updates=Update.ALL_TYPES)
         
     except PyMongoError as e:
         logger.error(f"MongoDB connection failed: {e}")
     except Exception as e:
         logger.error(f"Bot startup failed: {e}")
+    finally:
+        # Clean up when shutting down
+        cleanup_lock_file(lock_file)
 
 if __name__ == "__main__":
     main()
